@@ -36,6 +36,8 @@ web/.env.*.local
 web/*.log
 web/.turbo/
 web/.cache/
+web/next-env.d.ts
+web/tsconfig.tsbuildinfo
 
 # ===== IDE & OS =====
 .idea/

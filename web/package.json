@@ -1,0 +1,30 @@
+{
+  "name": "agentpulse-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AgentPulse Web Dashboard",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "15.0.3",
+    "react": "19.0.0-rc-66855b96-20241106",
+    "react-dom": "19.0.0-rc-66855b96-20241106",
+    "recharts": "2.13.3",
+    "swr": "2.2.5",
+    "lucide-react": "0.460.0",
+    "clsx": "2.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.1",
+    "@types/react": "19.0.0",
+    "@types/react-dom": "19.0.0",
+    "typescript": "5.7.2",
+    "eslint": "9.16.0",
+    "eslint-config-next": "15.0.3"
+  }
+}
