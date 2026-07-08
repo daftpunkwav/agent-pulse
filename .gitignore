@@ -1,0 +1,61 @@
+# ===== Python SDK =====
+sdk-python/.venv/
+sdk-python/__pycache__/
+sdk-python/**/__pycache__/
+sdk-python/*.egg-info/
+sdk-python/src/agentpulse.egg-info/
+sdk-python/dist/
+sdk-python/build/
+sdk-python/.pytest_cache/
+sdk-python/.mypy_cache/
+sdk-python/.ruff_cache/
+sdk-python/.coverage
+sdk-python/htmlcov/
+
+# ===== Go Backend =====
+backend/bin/
+backend/tmp/
+backend/*.exe
+backend/*.exe~
+backend/*.dll
+backend/*.so
+backend/*.dylib
+backend/.env
+backend/coverage.out
+backend/coverage.html
+backend/vendor/
+
+# ===== Web Frontend =====
+web/node_modules/
+web/.next/
+web/out/
+web/dist/
+web/build/
+web/.env.local
+web/.env.*.local
+web/*.log
+web/.turbo/
+web/.cache/
+
+# ===== IDE & OS =====
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ===== Secrets & Local Config =====
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# ===== Build & Deploy Artifacts =====
+*.log
+logs/
+tmp/
+data/
+deploy/.data/
