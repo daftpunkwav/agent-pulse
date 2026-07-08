@@ -1,0 +1,71 @@
+# =============================================================================
+# AgentPulse 配置文件
+# =============================================================================
+# 此文件为本地开发示例配置。生产环境建议使用环境变量或配置中心。
+#
+# 加载顺序：默认值 < 配置文件 < 环境变量（AGENTPULSE_*）
+# =============================================================================
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  mode: "debug"           # debug | release | test
+  read_timeout: "30s"
+  write_timeout: "30s"
+  shutdown_timeout: "30s"
+
+log:
+  level: "info"            # debug | info | warn | error
+  format: "console"        # json | console
+
+clickhouse:
+  host: "localhost"
+  port: 9000
+  database: "agentpulse"
+  username: "default"
+  password: ""
+  max_open_conns: 20
+  max_idle_conns: 10
+  tls_enabled: false
+
+postgres:
+  host: "localhost"
+  port: 5432
+  database: "agentpulse"
+  username: "agentpulse"
+  password: "changeme"
+  ssl_mode: "disable"
+  max_open_conns: 20
+  max_idle_conns: 10
+  max_lifetime: "1h"
+
+chroma:
+  host: "localhost"
+  port: 8000
+  api_key: ""
+  tenant: "default_tenant"
+  database: "default_database"
+
+judge:
+  model: "gpt-4o-mini"
+  api_key: ""              # 必须通过环境变量 AGENTPULSE_JUDGE_API_KEY 设置
+  base_url: "https://api.openai.com/v1"
+  timeout: "60s"
+  max_retries: 3
+  concurrency: 5
+
+otlp:
+  grpc_port: 4317
+  http_port: 4318
+
+evaluation:
+  sample_rate: 1.0         # 1.0 = 全量评估；0.1 = 采样 10%
+  async_workers: 3
+  async_queue_size: 1000
+  default_dimensions:
+    - "accuracy"
+    - "completeness"
+    - "tool_selection"
+    - "reasoning_depth"
+    - "helpfulness"
+  cache_ttl: "24h"
