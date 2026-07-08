@@ -59,22 +59,34 @@ func (r *PostgresPricingRepo) Get(ctx context.Context, model string, at time.Tim
 	ORDER BY effective_at DESC
 	LIMIT 1`
 
-	var row pricingRow
-	rows, err := r.client.Pool().Query(ctx, query, model, at)
+	var (
+		modelName       string
+		promptPrice     float64
+		completionPrice float64
+		currency        string
+		effectiveAt     time.Time
+		expiredAt       *time.Time
+	)
+
+	err := r.client.Pool().QueryRow(ctx, query, model, at).Scan(
+		&modelName, &promptPrice, &completionPrice, &currency,
+		&effectiveAt, &expiredAt,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("query pricing: %w", err)
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		return nil, pgx.ErrNoRows
-	}
-
-	if err := rows.ScanStruct(&row); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err
 	}
 
-	return row.toDomain(), nil
+	return &domain.Pricing{
+		Model:           modelName,
+		PromptPrice:     promptPrice,
+		CompletionPrice: completionPrice,
+		Currency:        currency,
+		EffectiveAt:     effectiveAt,
+		ExpiredAt:       expiredAt,
+	}, nil
 }
 
 // ListActive 列出所有当前生效的价格。
@@ -94,11 +106,28 @@ func (r *PostgresPricingRepo) ListActive(ctx context.Context) ([]*domain.Pricing
 
 	var pricings []*domain.Pricing
 	for rows.Next() {
-		var row pricingRow
-		if err := rows.ScanStruct(&row); err != nil {
+		var (
+			modelName       string
+			promptPrice     float64
+			completionPrice float64
+			currency        string
+			effectiveAt     time.Time
+			expiredAt       *time.Time
+		)
+		if err := rows.Scan(
+			&modelName, &promptPrice, &completionPrice, &currency,
+			&effectiveAt, &expiredAt,
+		); err != nil {
 			return nil, err
 		}
-		pricings = append(pricings, row.toDomain())
+		pricings = append(pricings, &domain.Pricing{
+			Model:           modelName,
+			PromptPrice:     promptPrice,
+			CompletionPrice: completionPrice,
+			Currency:        currency,
+			EffectiveAt:     effectiveAt,
+			ExpiredAt:       expiredAt,
+		})
 	}
 
 	return pricings, rows.Err()
