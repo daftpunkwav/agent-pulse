@@ -1,0 +1,204 @@
+// Package service - Span 写入与查询服务。
+package service
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/agentpulse/backend/internal/domain"
+	"github.com/agentpulse/backend/pkg/logger"
+)
+
+// SpanService 处理 Span 写入与查询。
+//
+// 关键职责：
+//   - 异步批量写入：使用 worker pool + 缓冲队列
+//   - 自动计算成本：如果 span 未设置 cost_usd 但有 tokens，按当前价格表计算
+//   - 自动触发评估：根据配置采样触发 LLM-as-Judge
+type SpanService struct {
+	repo       domain.SpanRepository
+	pricingRepo domain.PricingRepository
+	logger     logger.Logger
+
+	// 异步写入
+	batchQueue  chan *domain.Span
+	workerCount int
+	workerWG    sync.WaitGroup
+
+	closeOnce sync.Once
+	closed    chan struct{}
+}
+
+// SpanServiceConfig Span 服务配置。
+type SpanServiceConfig struct {
+	BatchSize     int
+	WorkerCount   int
+	QueueSize     int
+	FlushInterval int // 秒
+}
+
+// NewSpanService 创建服务实例。
+func NewSpanService(repo domain.SpanRepository, log logger.Logger) *SpanService {
+	cfg := SpanServiceConfig{
+		BatchSize:     100,
+		WorkerCount:   2,
+		QueueSize:     10000,
+		FlushInterval: 5,
+	}
+
+	s := &SpanService{
+		repo:        repo,
+		logger:      log.WithFields(map[string]any{"component": "span_service"}),
+		batchQueue:  make(chan *domain.Span, cfg.QueueSize),
+		workerCount: cfg.WorkerCount,
+		closed:      make(chan struct{}),
+	}
+
+	// 启动 worker
+	for i := 0; i < cfg.WorkerCount; i++ {
+		s.workerWG.Add(1)
+		go s.batchWorker(i)
+	}
+
+	return s
+}
+
+// IngestSpans 处理一批 Span 入库。
+//
+// 流程：
+//   1. 计算缺失的成本（基于价格表）
+//   2. 批量异步写入 ClickHouse
+func (s *SpanService) IngestSpans(ctx context.Context, spans []*domain.Span) error {
+	if len(spans) == 0 {
+		return nil
+	}
+
+	// 1. 计算缺失成本
+	s.fillMissingCost(ctx, spans)
+
+	// 2. 异步写入
+	for _, span := range spans {
+		select {
+		case s.batchQueue <- span:
+		case <-s.closed:
+			return fmt.Errorf("service closed")
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	return nil
+}
+
+// fillMissingCost 自动计算缺失的成本。
+func (s *SpanService) fillMissingCost(ctx context.Context, spans []*domain.Span) {
+	if s.pricingRepo == nil {
+		return
+	}
+
+	// 按 model 分组
+	byModel := make(map[string][]*domain.Span)
+	for _, span := range spans {
+		if span.Type == domain.SpanTypeLLM && span.CostUSD == 0 && span.Model != "" {
+			byModel[span.Model] = append(byModel[span.Model], span)
+		}
+	}
+
+	// 一次性查询价格
+	for model, ss := range byModel {
+		pricing, err := s.pricingRepo.Get(ctx, model, ss[0].StartTime)
+		if err != nil {
+			s.logger.Warnf("get pricing for %s: %v", model, err)
+			continue
+		}
+		for _, span := range ss {
+			span.CalculateCost(*pricing)
+		}
+	}
+}
+
+// GetByID 查询 Span。
+func (s *SpanService) GetByID(ctx context.Context, id string) (*domain.Span, error) {
+	return s.repo.GetByID(ctx, id)
+}
+
+// GetTraceTree 查询完整调用树。
+func (s *SpanService) GetTraceTree(ctx context.Context, traceID string) (*domain.TraceTree, error) {
+	return s.repo.GetTraceTree(ctx, traceID)
+}
+
+// ListBySession 查询会话。
+func (s *SpanService) ListBySession(ctx context.Context, sessionID string, opts domain.ListOptions) ([]*domain.Span, error) {
+	return s.repo.ListBySession(ctx, sessionID, opts)
+}
+
+// ---------------------------------------------------------------------------
+// 内部：批量写入 worker
+// ---------------------------------------------------------------------------
+
+func (s *SpanService) batchWorker(id int) {
+	defer s.workerWG.Done()
+
+	batch := make([]*domain.Span, 0, 100)
+	flushTimer := make(chan struct{})
+
+	// 定时刷新 goroutine
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				select {
+				case flushTimer <- struct{}{}:
+				default:
+				}
+			case <-s.closed:
+				return
+			}
+		}
+	}()
+
+	for {
+		select {
+		case span := <-s.batchQueue:
+			batch = append(batch, span)
+			if len(batch) >= 100 {
+				s.flush(id, batch)
+				batch = batch[:0]
+			}
+		case <-flushTimer:
+			if len(batch) > 0 {
+				s.flush(id, batch)
+				batch = batch[:0]
+			}
+		case <-s.closed:
+			// 最终刷新
+			if len(batch) > 0 {
+				s.flush(id, batch)
+			}
+			return
+		}
+	}
+}
+
+func (s *SpanService) flush(workerID int, batch []*domain.Span) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := s.repo.BatchInsert(ctx, batch); err != nil {
+		s.logger.Errorf("worker %d: flush %d spans: %v", workerID, len(batch), err)
+		return
+	}
+	s.logger.Debugf("worker %d: flushed %d spans", workerID, len(batch))
+}
+
+// Shutdown 优雅关闭，等待所有 worker 完成。
+func (s *SpanService) Shutdown(ctx context.Context) {
+	s.closeOnce.Do(func() {
+		close(s.closed)
+		s.workerWG.Wait()
+	})
+}

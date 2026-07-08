@@ -24,27 +24,33 @@ func NewPostgresEvaluationRepo(client *PostgresClient, log logger.Logger) *Postg
 	}
 }
 
-// evaluationRow 是数据库行结构。
+// evaluationRow 是数据库行结构（直接用 Scan 字段，不依赖 ScanStruct）。
 type evaluationRow struct {
-	ID             string  `db:"id"`
-	SpanID         string  `db:"span_id"`
-	TraceID        string  `db:"trace_id"`
-	SessionID      string  `db:"session_id"`
-	UserID         string  `db:"user_id"`
-	AgentName      string  `db:"agent_name"`
-	Accuracy       float32 `db:"accuracy"`
-	Completeness   float32 `db:"completeness"`
-	ToolSelection  float32 `db:"tool_selection"`
-	ReasoningDepth float32 `db:"reasoning_depth"`
-	Helpfulness    float32 `db:"helpfulness"`
-	Overall        float32 `db:"overall"`
-	Rationale      string  `db:"rationale"`
-	JudgeModel     string  `db:"judge_model"`
-	JudgePrompt    string  `db:"judge_prompt"`
-	TriggerType    string  `db:"trigger_type"`
-	SampleRate     float32 `db:"sample_rate"`
-	CreatedAt      int64   `db:"created_at_unix"`
+	ID             string
+	SpanID         string
+	TraceID        string
+	SessionID      string
+	UserID         string
+	AgentName      string
+	Accuracy       float32
+	Completeness   float32
+	ToolSelection  float32
+	ReasoningDepth float32
+	Helpfulness    float32
+	Overall        float32
+	Rationale      string
+	JudgeModel     string
+	JudgePrompt    string
+	TriggerType    string
+	SampleRate     float32
+	CreatedAt      int64
 }
+
+// evaluationColumns 列顺序（与 row 字段顺序一致）。
+const evaluationColumns = `id::text, span_id, trace_id, session_id::text, user_id, agent_name,
+	accuracy, completeness, tool_selection, reasoning_depth, helpfulness, overall,
+	rationale, judge_model, judge_prompt, trigger_type, sample_rate,
+	EXTRACT(EPOCH FROM created_at)::bigint`
 
 func (r evaluationRow) toDomain() *domain.Evaluation {
 	return &domain.Evaluation{
@@ -65,8 +71,17 @@ func (r evaluationRow) toDomain() *domain.Evaluation {
 		JudgePrompt:    r.JudgePrompt,
 		Trigger:        domain.EvaluationTrigger(r.TriggerType),
 		SampleRate:     r.SampleRate,
-		// CreatedAt: ...
 	}
+}
+
+func (r evaluationRow) scan(s pgx.Row) error {
+	return s.Scan(
+		&r.ID, &r.SpanID, &r.TraceID, &r.SessionID, &r.UserID, &r.AgentName,
+		&r.Accuracy, &r.Completeness, &r.ToolSelection,
+		&r.ReasoningDepth, &r.Helpfulness, &r.Overall,
+		&r.Rationale, &r.JudgeModel, &r.JudgePrompt, &r.TriggerType, &r.SampleRate,
+		&r.CreatedAt,
+	)
 }
 
 // ---------------------------------------------------------------------------
@@ -138,16 +153,11 @@ func (r *PostgresEvaluationRepo) BatchInsert(ctx context.Context, evals []*domai
 
 // GetByID 根据 ID 查询。
 func (r *PostgresEvaluationRepo) GetByID(ctx context.Context, id string) (*domain.Evaluation, error) {
-	const query = `SELECT
-		id::text, span_id, trace_id, session_id::text, user_id, agent_name,
-		accuracy, completeness, tool_selection, reasoning_depth, helpfulness, overall,
-		rationale, judge_model, judge_prompt, trigger_type, sample_rate,
-		EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix
-	FROM evaluations WHERE id = $1 LIMIT 1`
+	query := `SELECT ` + evaluationColumns + ` FROM evaluations WHERE id = $1 LIMIT 1`
 
-	row := evaluationRow{}
-	err := r.queryRow(ctx, query, &row, id)
-	if err != nil {
+	var row evaluationRow
+	pgxRow := r.client.Pool().QueryRow(ctx, query, id)
+	if err := row.scan(pgxRow); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
@@ -158,16 +168,11 @@ func (r *PostgresEvaluationRepo) GetByID(ctx context.Context, id string) (*domai
 
 // GetBySpanID 根据 Span ID 查询。
 func (r *PostgresEvaluationRepo) GetBySpanID(ctx context.Context, spanID string) (*domain.Evaluation, error) {
-	const query = `SELECT
-		id::text, span_id, trace_id, session_id::text, user_id, agent_name,
-		accuracy, completeness, tool_selection, reasoning_depth, helpfulness, overall,
-		rationale, judge_model, judge_prompt, trigger_type, sample_rate,
-		EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix
-	FROM evaluations WHERE span_id = $1 LIMIT 1`
+	query := `SELECT ` + evaluationColumns + ` FROM evaluations WHERE span_id = $1 LIMIT 1`
 
-	row := evaluationRow{}
-	err := r.queryRow(ctx, query, &row, spanID)
-	if err != nil {
+	var row evaluationRow
+	pgxRow := r.client.Pool().QueryRow(ctx, query, spanID)
+	if err := row.scan(pgxRow); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
@@ -178,24 +183,14 @@ func (r *PostgresEvaluationRepo) GetBySpanID(ctx context.Context, spanID string)
 
 // ListBySession 查询会话下所有评估。
 func (r *PostgresEvaluationRepo) ListBySession(ctx context.Context, sessionID string) ([]*domain.Evaluation, error) {
-	const query = `SELECT
-		id::text, span_id, trace_id, session_id::text, user_id, agent_name,
-		accuracy, completeness, tool_selection, reasoning_depth, helpfulness, overall,
-		rationale, judge_model, judge_prompt, trigger_type, sample_rate,
-		EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix
-	FROM evaluations WHERE session_id = $1 ORDER BY created_at DESC`
+	query := `SELECT ` + evaluationColumns + ` FROM evaluations WHERE session_id = $1 ORDER BY created_at DESC`
 
 	return r.queryList(ctx, query, sessionID)
 }
 
 // ListByAgent 查询 Agent 评估历史。
 func (r *PostgresEvaluationRepo) ListByAgent(ctx context.Context, agentName string, opts domain.ListOptions) ([]*domain.Evaluation, error) {
-	const query = `SELECT
-		id::text, span_id, trace_id, session_id::text, user_id, agent_name,
-		accuracy, completeness, tool_selection, reasoning_depth, helpfulness, overall,
-		rationale, judge_model, judge_prompt, trigger_type, sample_rate,
-		EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix
-	FROM evaluations WHERE agent_name = $1 ORDER BY created_at DESC LIMIT 100`
+	query := `SELECT ` + evaluationColumns + ` FROM evaluations WHERE agent_name = $1 ORDER BY created_at DESC LIMIT 100`
 
 	return r.queryList(ctx, query, agentName)
 }
@@ -218,14 +213,15 @@ func (r *PostgresEvaluationRepo) AverageScores(
 	  AND created_at <= $3`
 
 	var result struct {
-		Accuracy       float32 `db:"accuracy"`
-		Completeness   float32 `db:"completeness"`
-		ToolSelection  float32 `db:"tool_selection"`
-		ReasoningDepth float32 `db:"reasoning_depth"`
-		Helpfulness    float32 `db:"helpfulness"`
+		Accuracy       float32
+		Completeness   float32
+		ToolSelection  float32
+		ReasoningDepth float32
+		Helpfulness    float32
 	}
 
-	err := r.queryRow(ctx, query, &result, agentName, window.From, window.To)
+	err := r.client.Pool().QueryRow(ctx, query, agentName, window.From, window.To).
+		Scan(&result.Accuracy, &result.Completeness, &result.ToolSelection, &result.ReasoningDepth, &result.Helpfulness)
 	if err != nil {
 		return nil, err
 	}
@@ -243,20 +239,6 @@ func (r *PostgresEvaluationRepo) AverageScores(
 // 内部
 // ---------------------------------------------------------------------------
 
-func (r *PostgresEvaluationRepo) queryRow(ctx context.Context, query string, dest any, args ...any) error {
-	rows, err := r.client.Pool().Query(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("query: %w", err)
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		return pgx.ErrNoRows
-	}
-
-	return rows.Scan(dest)
-}
-
 func (r *PostgresEvaluationRepo) queryList(ctx context.Context, query string, args ...any) ([]*domain.Evaluation, error) {
 	rows, err := r.client.Pool().Query(ctx, query, args...)
 	if err != nil {
@@ -267,7 +249,7 @@ func (r *PostgresEvaluationRepo) queryList(ctx context.Context, query string, ar
 	var evals []*domain.Evaluation
 	for rows.Next() {
 		var row evaluationRow
-		if err := rows.ScanStruct(&row); err != nil {
+		if err := row.scan(rows); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		evals = append(evals, row.toDomain())

@@ -31,8 +31,6 @@ func NewPostgresMetadataRepo(client *PostgresClient, log logger.Logger) *Postgre
 // ===========================================================================
 
 // CreateHarnessVersion 创建新版本。
-//
-// 自动计算下一个版本号（agent_name 下递增）。
 func (r *PostgresMetadataRepo) CreateHarnessVersion(ctx context.Context, hc *domain.HarnessConfig) error {
 	tx, err := r.client.Pool().Begin(ctx)
 	if err != nil {
@@ -40,7 +38,6 @@ func (r *PostgresMetadataRepo) CreateHarnessVersion(ctx context.Context, hc *dom
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// 查询下一个版本号
 	var maxVersion int
 	err = tx.QueryRow(ctx,
 		`SELECT COALESCE(MAX(version), 0) FROM harness_configs WHERE agent_name = $1`,
@@ -88,21 +85,25 @@ func (r *PostgresMetadataRepo) GetHarnessVersion(ctx context.Context, agentName 
 		created_at, promoted_at
 	FROM harness_configs WHERE agent_name = $1 AND version = $2 LIMIT 1`
 
-	var row struct {
-		ID             string         `db:"id"`
-		AgentName      string         `db:"agent_name"`
-		Version        int            `db:"version"`
-		ConfigYAML     string         `db:"config_yaml"`
-		ConfigHash     string         `db:"config_hash"`
-		Status         string         `db:"status"`
-		TrafficPercent int            `db:"traffic_percent"`
-		Notes          string         `db:"notes"`
-		CreatedBy      string         `db:"created_by"`
-		CreatedAt      time.Time      `db:"created_at"`
-		PromotedAt     *time.Time     `db:"promoted_at"`
-	}
+	var (
+		id             string
+		agName         string
+		v              int
+		yaml           string
+		hash           string
+		status         string
+		trafficPercent int
+		notes          string
+		createdBy      string
+		createdAt      time.Time
+		promotedAt     *time.Time
+	)
 
-	err := r.scanOne(ctx, query, &row, agentName, version)
+	err := r.client.Pool().QueryRow(ctx, query, agentName, version).Scan(
+		&id, &agName, &v, &yaml, &hash,
+		&status, &trafficPercent, &notes, &createdBy,
+		&createdAt, &promotedAt,
+	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -111,17 +112,17 @@ func (r *PostgresMetadataRepo) GetHarnessVersion(ctx context.Context, agentName 
 	}
 
 	return &domain.HarnessConfig{
-		ID:             row.ID,
-		AgentName:      row.AgentName,
-		Version:        row.Version,
-		ConfigYAML:     row.ConfigYAML,
-		ConfigHash:     row.ConfigHash,
-		Status:         domain.HarnessStatus(row.Status),
-		TrafficPercent: row.TrafficPercent,
-		Notes:          row.Notes,
-		CreatedBy:      row.CreatedBy,
-		CreatedAt:      row.CreatedAt,
-		PromotedAt:     row.PromotedAt,
+		ID:             id,
+		AgentName:      agName,
+		Version:        v,
+		ConfigYAML:     yaml,
+		ConfigHash:     hash,
+		Status:         domain.HarnessStatus(status),
+		TrafficPercent: trafficPercent,
+		Notes:          notes,
+		CreatedBy:      createdBy,
+		CreatedAt:      createdAt,
+		PromotedAt:     promotedAt,
 	}, nil
 }
 
@@ -133,12 +134,46 @@ func (r *PostgresMetadataRepo) ListHarnessVersions(ctx context.Context, agentNam
 		created_at, promoted_at
 	FROM harness_configs WHERE agent_name = $1 ORDER BY version DESC`
 
-	return r.scanHarnessList(ctx, query, agentName)
+	rows, err := r.client.Pool().Query(ctx, query, agentName)
+	if err != nil {
+		return nil, fmt.Errorf("query harness list: %w", err)
+	}
+	defer rows.Close()
+
+	var configs []*domain.HarnessConfig
+	for rows.Next() {
+		var (
+			id, agName, yaml, hash, status, notes, createdBy string
+			v, trafficPercent                                int
+			createdAt                                        time.Time
+			promotedAt                                       *time.Time
+		)
+		if err := rows.Scan(
+			&id, &agName, &v, &yaml, &hash,
+			&status, &trafficPercent, &notes, &createdBy,
+			&createdAt, &promotedAt,
+		); err != nil {
+			return nil, err
+		}
+		configs = append(configs, &domain.HarnessConfig{
+			ID:             id,
+			AgentName:      agName,
+			Version:        v,
+			ConfigYAML:     yaml,
+			ConfigHash:     hash,
+			Status:         domain.HarnessStatus(status),
+			TrafficPercent: trafficPercent,
+			Notes:          notes,
+			CreatedBy:      createdBy,
+			CreatedAt:      createdAt,
+			PromotedAt:     promotedAt,
+		})
+	}
+
+	return configs, rows.Err()
 }
 
 // UpdateHarnessStatus 更新版本状态。
-//
-// 事务保证：将原 production 版本降级为 archived，将新版本提升为 production。
 func (r *PostgresMetadataRepo) UpdateHarnessStatus(ctx context.Context, agentName string, version int, status domain.HarnessStatus) error {
 	tx, err := r.client.Pool().Begin(ctx)
 	if err != nil {
@@ -147,7 +182,6 @@ func (r *PostgresMetadataRepo) UpdateHarnessStatus(ctx context.Context, agentNam
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if status == domain.HarnessProduction {
-		// 将该 agent 现有 production 版本降级
 		_, err = tx.Exec(ctx,
 			`UPDATE harness_configs SET status = 'archived' WHERE agent_name = $1 AND status = 'production'`,
 			agentName,
@@ -157,7 +191,6 @@ func (r *PostgresMetadataRepo) UpdateHarnessStatus(ctx context.Context, agentNam
 		}
 	}
 
-	// 更新目标版本
 	_, err = tx.Exec(ctx,
 		`UPDATE harness_configs SET status = $1, promoted_at = $2 WHERE agent_name = $3 AND version = $4`,
 		string(status), time.Now(), agentName, version,
@@ -211,22 +244,20 @@ func (r *PostgresMetadataRepo) GetABTest(ctx context.Context, id string) (*domai
 		traffic_percent, status, started_at, ended_at, result, metadata, created_at
 	FROM ab_tests WHERE id = $1 LIMIT 1`
 
-	var row struct {
-		ID               string          `db:"id"`
-		Name             string          `db:"name"`
-		AgentName        string          `db:"agent_name"`
-		ControlVersion   int             `db:"control_version"`
-		TreatmentVersion int             `db:"treatment_version"`
-		TrafficPercent   int             `db:"traffic_percent"`
-		Status           string          `db:"status"`
-		StartedAt        time.Time       `db:"started_at"`
-		EndedAt          *time.Time      `db:"ended_at"`
-		Result           []byte          `db:"result"`
-		Metadata         []byte          `db:"metadata"`
-		CreatedAt        time.Time       `db:"created_at"`
-	}
+	var (
+		abID, name, agentName, status string
+		controlV, treatmentV, traffic int
+		startedAt                    time.Time
+		endedAt                      *time.Time
+		resultJSON                   []byte
+		metadataJSON                 []byte
+		createdAt                    time.Time
+	)
 
-	err := r.scanOne(ctx, query, &row, id)
+	err := r.client.Pool().QueryRow(ctx, query, id).Scan(
+		&abID, &name, &agentName, &controlV, &treatmentV,
+		&traffic, &status, &startedAt, &endedAt, &resultJSON, &metadataJSON, &createdAt,
+	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -235,25 +266,24 @@ func (r *PostgresMetadataRepo) GetABTest(ctx context.Context, id string) (*domai
 	}
 
 	ab := &domain.ABTest{
-		ID:               row.ID,
-		Name:             row.Name,
-		AgentName:        row.AgentName,
-		ControlVersion:   row.ControlVersion,
-		TreatmentVersion: row.TreatmentVersion,
-		TrafficPercent:   row.TrafficPercent,
-		Status:           domain.ABTestStatus(row.Status),
-		StartedAt:        row.StartedAt,
-		EndedAt:          row.EndedAt,
-		CreatedAt:        row.CreatedAt,
+		ID:               abID,
+		Name:             name,
+		AgentName:        agentName,
+		ControlVersion:   controlV,
+		TreatmentVersion: treatmentV,
+		TrafficPercent:   traffic,
+		Status:           domain.ABTestStatus(status),
+		StartedAt:        startedAt,
+		EndedAt:          endedAt,
+		CreatedAt:        createdAt,
 	}
 
-	if len(row.Metadata) > 0 {
-		_ = json.Unmarshal(row.Metadata, &ab.Metadata)
+	if len(metadataJSON) > 0 {
+		_ = json.Unmarshal(metadataJSON, &ab.Metadata)
 	}
-
-	if len(row.Result) > 0 {
+	if len(resultJSON) > 0 {
 		var result domain.ABTestResult
-		if err := json.Unmarshal(row.Result, &result); err == nil {
+		if err := json.Unmarshal(resultJSON, &result); err == nil {
 			ab.Result = &result
 		}
 	}
@@ -263,7 +293,7 @@ func (r *PostgresMetadataRepo) GetABTest(ctx context.Context, id string) (*domai
 
 // ListABTests 列出 A/B 测试。
 func (r *PostgresMetadataRepo) ListABTests(ctx context.Context, opts domain.ListOptions) ([]*domain.ABTest, error) {
-	query := `SELECT
+	const query = `SELECT
 		id::text, name, agent_name, control_version, treatment_version,
 		traffic_percent, status, started_at, ended_at, result, metadata, created_at
 	FROM ab_tests ORDER BY created_at DESC LIMIT 100`
@@ -276,42 +306,40 @@ func (r *PostgresMetadataRepo) ListABTests(ctx context.Context, opts domain.List
 
 	var abs []*domain.ABTest
 	for rows.Next() {
-		var row struct {
-			ID               string          `db:"id"`
-			Name             string          `db:"name"`
-			AgentName        string          `db:"agent_name"`
-			ControlVersion   int             `db:"control_version"`
-			TreatmentVersion int             `db:"treatment_version"`
-			TrafficPercent   int             `db:"traffic_percent"`
-			Status           string          `db:"status"`
-			StartedAt        time.Time       `db:"started_at"`
-			EndedAt          *time.Time      `db:"ended_at"`
-			Result           []byte          `db:"result"`
-			Metadata         []byte          `db:"metadata"`
-			CreatedAt        time.Time       `db:"created_at"`
-		}
-		if err := rows.ScanStruct(&row); err != nil {
+		var (
+			abID, name, agentName, status string
+			controlV, treatmentV, traffic int
+			startedAt                    time.Time
+			endedAt                      *time.Time
+			resultJSON                   []byte
+			metadataJSON                 []byte
+			createdAt                    time.Time
+		)
+		if err := rows.Scan(
+			&abID, &name, &agentName, &controlV, &treatmentV,
+			&traffic, &status, &startedAt, &endedAt, &resultJSON, &metadataJSON, &createdAt,
+		); err != nil {
 			return nil, err
 		}
 
 		ab := &domain.ABTest{
-			ID:               row.ID,
-			Name:             row.Name,
-			AgentName:        row.AgentName,
-			ControlVersion:   row.ControlVersion,
-			TreatmentVersion: row.TreatmentVersion,
-			TrafficPercent:   row.TrafficPercent,
-			Status:           domain.ABTestStatus(row.Status),
-			StartedAt:        row.StartedAt,
-			EndedAt:          row.EndedAt,
-			CreatedAt:        row.CreatedAt,
+			ID:               abID,
+			Name:             name,
+			AgentName:        agentName,
+			ControlVersion:   controlV,
+			TreatmentVersion: treatmentV,
+			TrafficPercent:   traffic,
+			Status:           domain.ABTestStatus(status),
+			StartedAt:        startedAt,
+			EndedAt:          endedAt,
+			CreatedAt:        createdAt,
 		}
-		if len(row.Metadata) > 0 {
-			_ = json.Unmarshal(row.Metadata, &ab.Metadata)
+		if len(metadataJSON) > 0 {
+			_ = json.Unmarshal(metadataJSON, &ab.Metadata)
 		}
-		if len(row.Result) > 0 {
+		if len(resultJSON) > 0 {
 			var result domain.ABTestResult
-			if err := json.Unmarshal(row.Result, &result); err == nil {
+			if err := json.Unmarshal(resultJSON, &result); err == nil {
 				ab.Result = &result
 			}
 		}
@@ -392,105 +420,43 @@ func (r *PostgresMetadataRepo) ListFailureClusters(ctx context.Context, activeOn
 
 	var clusters []*domain.FailureCluster
 	for rows.Next() {
-		var row struct {
-			ID            string    `db:"id"`
-			Name          string    `db:"cluster_name"`
-			Description   string    `db:"description"`
-			TraceCount    int       `db:"trace_count"`
-			Percentage    float32   `db:"percentage"`
-			CommonPattern string    `db:"common_pattern"`
-			Suggestion    string    `db:"suggestion"`
-			ExampleTraces []byte    `db:"example_traces"`
-			Metadata      []byte    `db:"metadata"`
-			IsActive      bool      `db:"is_active"`
-			CreatedAt     time.Time `db:"created_at"`
-			UpdatedAt     time.Time `db:"updated_at"`
-		}
-		if err := rows.ScanStruct(&row); err != nil {
+		var (
+			id, name, description, commonPattern, suggestion string
+			traceCount                                      int
+			percentage                                      float32
+			exampleTracesJSON                               []byte
+			metadataJSON                                    []byte
+			isActive                                        bool
+			createdAt, updatedAt                            time.Time
+		)
+		if err := rows.Scan(
+			&id, &name, &description, &traceCount, &percentage,
+			&commonPattern, &suggestion, &exampleTracesJSON, &metadataJSON,
+			&isActive, &createdAt, &updatedAt,
+		); err != nil {
 			return nil, err
 		}
 
 		cluster := &domain.FailureCluster{
-			ID:            row.ID,
-			Name:          row.Name,
-			Description:   row.Description,
-			TraceCount:    row.TraceCount,
-			Percentage:    row.Percentage,
-			CommonPattern: row.CommonPattern,
-			Suggestion:    row.Suggestion,
-			IsActive:      row.IsActive,
-			CreatedAt:     row.CreatedAt,
-			UpdatedAt:     row.UpdatedAt,
+			ID:            id,
+			Name:          name,
+			Description:   description,
+			TraceCount:    traceCount,
+			Percentage:    percentage,
+			CommonPattern: commonPattern,
+			Suggestion:    suggestion,
+			IsActive:      isActive,
+			CreatedAt:     createdAt,
+			UpdatedAt:     updatedAt,
 		}
-		if len(row.ExampleTraces) > 0 {
-			_ = json.Unmarshal(row.ExampleTraces, &cluster.ExampleTraces)
+		if len(exampleTracesJSON) > 0 {
+			_ = json.Unmarshal(exampleTracesJSON, &cluster.ExampleTraces)
 		}
-		if len(row.Metadata) > 0 {
-			_ = json.Unmarshal(row.Metadata, &cluster.Metadata)
+		if len(metadataJSON) > 0 {
+			_ = json.Unmarshal(metadataJSON, &cluster.Metadata)
 		}
 		clusters = append(clusters, cluster)
 	}
 
 	return clusters, rows.Err()
-}
-
-// ---------------------------------------------------------------------------
-// 内部辅助
-// ---------------------------------------------------------------------------
-
-func (r *PostgresMetadataRepo) scanOne(ctx context.Context, query string, dest any, args ...any) error {
-	rows, err := r.client.Pool().Query(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("query: %w", err)
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		return pgx.ErrNoRows
-	}
-
-	return rows.ScanStruct(dest)
-}
-
-func (r *PostgresMetadataRepo) scanHarnessList(ctx context.Context, query string, args ...any) ([]*domain.HarnessConfig, error) {
-	rows, err := r.client.Pool().Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query harness list: %w", err)
-	}
-	defer rows.Close()
-
-	var configs []*domain.HarnessConfig
-	for rows.Next() {
-		var row struct {
-			ID             string     `db:"id"`
-			AgentName      string     `db:"agent_name"`
-			Version        int        `db:"version"`
-			ConfigYAML     string     `db:"config_yaml"`
-			ConfigHash     string     `db:"config_hash"`
-			Status         string     `db:"status"`
-			TrafficPercent int        `db:"traffic_percent"`
-			Notes          string     `db:"notes"`
-			CreatedBy      string     `db:"created_by"`
-			CreatedAt      time.Time  `db:"created_at"`
-			PromotedAt     *time.Time `db:"promoted_at"`
-		}
-		if err := rows.ScanStruct(&row); err != nil {
-			return nil, err
-		}
-		configs = append(configs, &domain.HarnessConfig{
-			ID:             row.ID,
-			AgentName:      row.AgentName,
-			Version:        row.Version,
-			ConfigYAML:     row.ConfigYAML,
-			ConfigHash:     row.ConfigHash,
-			Status:         domain.HarnessStatus(row.Status),
-			TrafficPercent: row.TrafficPercent,
-			Notes:          row.Notes,
-			CreatedBy:      row.CreatedBy,
-			CreatedAt:      row.CreatedAt,
-			PromotedAt:     row.PromotedAt,
-		})
-	}
-
-	return configs, rows.Err()
 }

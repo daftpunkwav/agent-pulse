@@ -78,6 +78,6 @@ func run() error {
 		return err
 	}
 
-	log.Info("AgentPulse stopped gracefully")
+	log.Infof("AgentPulse stopped gracefully")
 	return nil
 }

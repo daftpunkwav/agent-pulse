@@ -27,68 +27,46 @@ import (
 )
 
 // Application 是 AgentPulse 的应用容器。
-//
-// 持有所有运行时依赖：HTTP 服务、OTLP 接收器、基础设施连接。
-// 通过 Serve/Shutdown 控制生命周期。
 type Application struct {
 	cfg *config.Config
 	log logger.Logger
 
-	// 基础设施连接
 	clickhouse *repository.ClickHouseClient
 	postgres   *repository.PostgresClient
 	chroma     *repository.ChromaClient
 
-	// 业务服务
 	services *service.Container
 
-	// HTTP 服务
 	apiServer  *http.Server
 	otlpServer *http.Server
 
-	// 关闭钩子
 	shutdownFns []ShutdownFunc
 	mu          sync.Mutex
 	closed      bool
 }
 
 // ShutdownFunc 是优雅关闭钩子。
-//
-// 按注册顺序的逆序执行。
 type ShutdownFunc func(context.Context) error
 
-// LoadConfig 是 config.Load 的薄包装，便于 main.go 调用。
+// LoadConfig 是 config.Load 的薄包装。
 func LoadConfig(dir string) (*config.Config, error) {
 	return config.Load(dir)
 }
 
 // New 创建并初始化应用。
-//
-// 初始化顺序：
-//   1. 基础设施连接（ClickHouse/PG/Chroma）
-//   2. Repository 层
-//   3. Service 层
-//   4. HTTP 路由与中间件
 func New(cfg *config.Config, log logger.Logger) (*Application, error) {
 	app := &Application{
 		cfg: cfg,
-		log: log.WithFields(map[string]any{
-			"component": "app",
-		}),
+		log: log.WithFields(map[string]any{"component": "app"}),
 	}
 
-	// 1. 初始化基础设施
 	if err := app.initInfrastructure(); err != nil {
 		return nil, fmt.Errorf("init infrastructure: %w", err)
 	}
 
-	// 2. 初始化 Repository 层
 	repos := app.initRepositories()
-
-	// 3. 初始化 Service 层
 	app.services = service.NewContainer(repos, log)
 
-	// 4. 初始化 HTTP 服务
 	if err := app.initHTTPServers(); err != nil {
 		return nil, fmt.Errorf("init http servers: %w", err)
 	}
@@ -96,34 +74,27 @@ func New(cfg *config.Config, log logger.Logger) (*Application, error) {
 	return app, nil
 }
 
-// ---------------------------------------------------------------------------
-// 初始化
-// ---------------------------------------------------------------------------
-
 func (a *Application) initInfrastructure() error {
-	// ClickHouse
 	chClient, err := repository.NewClickHouseClient(a.cfg.ClickHouse, a.log)
 	if err != nil {
 		return fmt.Errorf("connect clickhouse: %w", err)
 	}
 	a.clickhouse = chClient
 	a.onShutdown(func(ctx context.Context) error {
-		a.log.Info("closing clickhouse connection")
+		a.log.Infof("closing clickhouse connection")
 		return chClient.Close()
 	})
 
-	// PostgreSQL
 	pgClient, err := repository.NewPostgresClient(a.cfg.Postgres, a.log)
 	if err != nil {
 		return fmt.Errorf("connect postgres: %w", err)
 	}
 	a.postgres = pgClient
 	a.onShutdown(func(ctx context.Context) error {
-		a.log.Info("closing postgres connection")
+		a.log.Infof("closing postgres connection")
 		return pgClient.Close()
 	})
 
-	// Chroma（可选：连接失败不阻塞启动）
 	if a.cfg.Chroma.Host != "" {
 		chromaClient, err := repository.NewChromaClient(a.cfg.Chroma, a.log)
 		if err != nil {
@@ -131,7 +102,7 @@ func (a *Application) initInfrastructure() error {
 		} else {
 			a.chroma = chromaClient
 			a.onShutdown(func(ctx context.Context) error {
-				a.log.Info("closing chroma connection")
+				a.log.Infof("closing chroma connection")
 				return chromaClient.Close()
 			})
 		}
@@ -141,27 +112,26 @@ func (a *Application) initInfrastructure() error {
 }
 
 func (a *Application) initRepositories() *repository.Container {
-	clickhouseRepo := repository.NewClickHouseSpanRepository(a.clickhouse, a.log)
-	postgresRepo := repository.NewPostgresMetadataRepository(a.postgres, a.log)
-	evalRepo := repository.NewPostgresEvaluationRepository(a.postgres, a.log)
-	pricingRepo := repository.NewPostgresPricingRepository(a.postgres, a.log)
+	clickhouseRepo := repository.NewClickHouseSpanRepo(a.clickhouse, a.log)
+	postgresRepo := repository.NewPostgresMetadataRepo(a.postgres, a.log)
+	evalRepo := repository.NewPostgresEvaluationRepo(a.postgres, a.log)
+	pricingRepo := repository.NewPostgresPricingRepo(a.postgres, a.log)
 
 	var vectorRepo domain.VectorRepository
 	if a.chroma != nil {
-		vectorRepo = repository.NewChromaVectorRepository(a.chroma, a.log)
+		vectorRepo = repository.NewChromaVectorRepo(a.chroma, a.log)
 	}
 
 	return repository.NewContainer(repository.ContainerDeps{
-		Span:        clickhouseRepo,
-		Metadata:    postgresRepo,
-		Evaluation:  evalRepo,
-		Pricing:     pricingRepo,
-		Vector:      vectorRepo,
+		Span:       clickhouseRepo,
+		Metadata:   postgresRepo,
+		Evaluation: evalRepo,
+		Pricing:    pricingRepo,
+		Vector:     vectorRepo,
 	})
 }
 
 func (a *Application) initHTTPServers() error {
-	// 主 API 服务
 	gin.SetMode(a.cfg.Server.Mode)
 	router := api.NewRouter(a.cfg, a.services, a.log)
 	a.apiServer = &http.Server{
@@ -171,7 +141,6 @@ func (a *Application) initHTTPServers() error {
 		WriteTimeout: a.cfg.Server.WriteTimeout,
 	}
 
-	// OTLP HTTP 接收器
 	otlpHandler := collector.NewHTTPHandler(a.services, a.log)
 	a.otlpServer = &http.Server{
 		Addr:    fmt.Sprintf(":%d", a.cfg.OTLP.HTTPPort),
@@ -181,13 +150,7 @@ func (a *Application) initHTTPServers() error {
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// 生命周期
-// ---------------------------------------------------------------------------
-
-// Serve 启动所有 HTTP 服务并阻塞等待。
-//
-// 任一服务异常返回时，整体退出。
+// Serve 启动所有 HTTP 服务。
 func (a *Application) Serve() error {
 	errCh := make(chan error, 2)
 
@@ -223,19 +186,16 @@ func (a *Application) Shutdown(ctx context.Context) error {
 	a.closed = true
 	a.mu.Unlock()
 
-	a.log.Info("shutting down AgentPulse...")
+	a.log.Infof("shutting down AgentPulse...")
 
-	// 1. 停止接受新请求
 	if err := a.shutdownHTTP(ctx); err != nil {
 		a.log.Errorf("shutdown http: %v", err)
 	}
 
-	// 2. 关闭服务层（清理 goroutine）
 	if a.services != nil {
 		a.services.Shutdown(ctx)
 	}
 
-	// 3. 执行注册的关闭钩子（逆序）
 	var firstErr error
 	for i := len(a.shutdownFns) - 1; i >= 0; i-- {
 		if err := a.shutdownFns[i](ctx); err != nil {
@@ -279,7 +239,7 @@ func (a *Application) onShutdown(fn ShutdownFunc) {
 	a.mu.Unlock()
 }
 
-// ListenerAddr 返回主 API 服务实际监听地址（用于测试）。
+// ListenerAddr 返回主 API 服务实际监听地址。
 func (a *Application) ListenerAddr() string {
 	if a.apiServer == nil {
 		return ""
@@ -310,8 +270,8 @@ func (a *Application) HealthCheck() error {
 
 	for _, c := range checks {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
 		_ = ctx
+		defer cancel()
 		if err := c.fn(); err != nil {
 			return fmt.Errorf("%s: %w", c.name, err)
 		}

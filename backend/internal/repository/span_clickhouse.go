@@ -27,6 +27,11 @@ func NewClickHouseSpanRepo(client *ClickHouseClient, log logger.Logger) *ClickHo
 	}
 }
 
+// Client 返回底层 ClickHouse 客户端（用于服务层执行自定义 SQL）。
+func (r *ClickHouseSpanRepo) Client() *ClickHouseClient {
+	return r.client
+}
+
 // spanRow 是 ClickHouse 行结构（与表 schema 对应）。
 type spanRow struct {
 	Timestamp        time.Time `ch:"timestamp"`
@@ -83,7 +88,7 @@ func (r spanRow) toDomain() *domain.Span {
 		OutputPreview:    r.OutputPreview,
 		ErrorMessage:     r.ErrorMessage,
 	}
-	if !r.StartTime.IsZero() && r.LatencyMs > 0 {
+	if !r.Timestamp.IsZero() && r.LatencyMs > 0 {
 		s.EndTime = s.StartTime.Add(time.Duration(r.LatencyMs) * time.Millisecond)
 	}
 	if r.Attributes != "" {
