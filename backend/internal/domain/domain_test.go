@@ -470,6 +470,94 @@ func TestABTestCreation(t *testing.T) {
 	}
 }
 
+// ===== Span.Validate 测试 =====
+
+func TestSpanValidate(t *testing.T) {
+	now := time.Now()
+
+	t.Run("valid agent span", func(t *testing.T) {
+		span := &domain.Span{
+			ID: "span-1", TraceID: "trace-1", SessionID: "session-1",
+			Type: domain.SpanTypeAgent, StartTime: now,
+		}
+		if err := span.Validate(); err != nil {
+			t.Errorf("valid agent span should pass validation: %v", err)
+		}
+	})
+
+	t.Run("valid llm span", func(t *testing.T) {
+		span := &domain.Span{
+			ID: "span-1", TraceID: "trace-1", SessionID: "session-1",
+			Type: domain.SpanTypeLLM, Model: "gpt-4o",
+			PromptTokens: 100, StartTime: now,
+		}
+		if err := span.Validate(); err != nil {
+			t.Errorf("valid llm span should pass validation: %v", err)
+		}
+	})
+
+	t.Run("valid tool span", func(t *testing.T) {
+		span := &domain.Span{
+			ID: "span-1", TraceID: "trace-1", SessionID: "session-1",
+			Type: domain.SpanTypeTool, ToolName: "search",
+			StartTime: now,
+		}
+		if err := span.Validate(); err != nil {
+			t.Errorf("valid tool span should pass validation: %v", err)
+		}
+	})
+
+	t.Run("missing id fails", func(t *testing.T) {
+		span := &domain.Span{
+			TraceID: "trace-1", SessionID: "session-1",
+			Type: domain.SpanTypeAgent, StartTime: now,
+		}
+		if err := span.Validate(); err == nil {
+			t.Error("expected error for missing id")
+		}
+	})
+
+	t.Run("missing trace_id fails", func(t *testing.T) {
+		span := &domain.Span{
+			ID: "span-1", SessionID: "session-1",
+			Type: domain.SpanTypeAgent, StartTime: now,
+		}
+		if err := span.Validate(); err == nil {
+			t.Error("expected error for missing trace_id")
+		}
+	})
+
+	t.Run("missing session_id fails", func(t *testing.T) {
+		span := &domain.Span{
+			ID: "span-1", TraceID: "trace-1",
+			Type: domain.SpanTypeAgent, StartTime: now,
+		}
+		if err := span.Validate(); err == nil {
+			t.Error("expected error for missing session_id")
+		}
+	})
+
+	t.Run("llm span missing model fails", func(t *testing.T) {
+		span := &domain.Span{
+			ID: "span-1", TraceID: "trace-1", SessionID: "session-1",
+			Type: domain.SpanTypeLLM, StartTime: now,
+		}
+		if err := span.Validate(); err == nil {
+			t.Error("expected error for llm span without model")
+		}
+	})
+
+	t.Run("tool span missing tool_name fails", func(t *testing.T) {
+		span := &domain.Span{
+			ID: "span-1", TraceID: "trace-1", SessionID: "session-1",
+			Type: domain.SpanTypeTool, StartTime: now,
+		}
+		if err := span.Validate(); err == nil {
+			t.Error("expected error for tool span without tool_name")
+		}
+	})
+}
+
 // ===== 辅助函数 =====
 
 // errorsAreEqual 简单错误比较（因为我们没有使用 errors.Is 包装）。

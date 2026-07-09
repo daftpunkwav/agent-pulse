@@ -12,6 +12,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -131,6 +132,46 @@ func (s *Span) MarkComplete(status SpanStatus) {
 	s.EndTime = time.Now()
 	s.LatencyMs = uint32(s.Duration().Milliseconds())
 	s.Status = status
+}
+
+// Validate 检查 Span 的必填字段是否完整。
+//
+// 不同 SpanType 有不同的必填字段要求：
+//   - agent: 需 TraceID, SessionID
+//   - llm:   需 TraceID, Model, PromptTokens >= 0
+//   - tool:  需 TraceID, ToolName
+//   - reasoning: 需 TraceID, ReasoningStep >= 0
+//   - evaluation: 需 TraceID
+func (s *Span) Validate() error {
+	if s.ID == "" {
+		return fmt.Errorf("span id is required")
+	}
+	if s.TraceID == "" {
+		return fmt.Errorf("span %s: trace_id is required", s.ID)
+	}
+	if s.SessionID == "" {
+		return fmt.Errorf("span %s: session_id is required", s.ID)
+	}
+	if s.StartTime.IsZero() {
+		return fmt.Errorf("span %s: start_time is required", s.ID)
+	}
+
+	switch s.Type {
+	case SpanTypeLLM:
+		if s.Model == "" {
+			return fmt.Errorf("span %s: model is required for llm type", s.ID)
+		}
+	case SpanTypeTool:
+		if s.ToolName == "" {
+			return fmt.Errorf("span %s: tool_name is required for tool type", s.ID)
+		}
+	case SpanTypeReasoning:
+		if s.ReasoningStep == 0 && s.ReasoningStep != ^uint16(0) {
+			// reasoning_step 为 0 是合法的（第一步）
+		}
+	}
+
+	return nil
 }
 
 // ============================================================================
