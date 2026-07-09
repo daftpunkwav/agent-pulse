@@ -60,7 +60,7 @@
   }
 
   .sidebar-nav-link {
-    @apply group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all;
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all;
     @apply text-slate-600 hover:bg-slate-100 hover:text-slate-900;
     @apply dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200;
   }

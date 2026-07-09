@@ -51,7 +51,7 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={clsx(
-                "sidebar-nav-link",
+                "group sidebar-nav-link",
                 isActive && "sidebar-nav-link--active"
               )}
             >
