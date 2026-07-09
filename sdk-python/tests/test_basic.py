@@ -1,5 +1,7 @@
 """tests/test_basic.py - SDK 基础测试。"""
 
+import asyncio
+
 import pytest
 
 from agentpulse import init, shutdown
@@ -22,6 +24,13 @@ def test_client_init():
     )
     assert client._initialized is True
     shutdown()
+
+
+def test_instance_raises_without_init():
+    """未 init 时 instance() 应抛 RuntimeError。"""
+    shutdown()
+    with pytest.raises(RuntimeError, match="not initialized"):
+        Client.instance()
 
 
 def test_session_creation():
@@ -49,7 +58,7 @@ def test_session_context_manager():
     assert get_current_session() is None
 
 
-def test_decorators():
+def test_decorators_wrap():
     """测试装饰器能正常包装函数（不强制 OTLP 接收）。"""
     from agentpulse import observe
 
@@ -57,12 +66,26 @@ def test_decorators():
     def my_func(x: int) -> int:
         return x * 2
 
-    # 不实际执行（避免 OTLP 网络调用）
     assert my_func.__name__ == "my_func"
 
 
+def test_decorators_async_execution():
+    """测试异步装饰器实际执行。"""
+    from agentpulse import observe
+
+    init(endpoint="http://localhost:8080", service_name="async-test")
+
+    @observe(agent_name="test-agent", capture_args=True, capture_result=True)
+    async def async_func(x: int) -> int:
+        return x + 1
+
+    result = asyncio.run(async_func(41))
+    assert result == 42
+    shutdown()
+
+
 def test_safe_serialize():
-    """测试安全序列化。"""
+    """测试安全序列化与截断标记。"""
     from agentpulse.decorators import _safe_serialize
 
     assert _safe_serialize("hello") == "hello"
@@ -70,22 +93,53 @@ def test_safe_serialize():
     assert _safe_serialize({"a": 1}) == '{"a": 1}'
     assert _safe_serialize([1, 2, 3]) == "[1, 2, 3]"
     assert _safe_serialize(None) == ""
-    # 长字符串截断
     long_str = "x" * 2000
-    assert len(_safe_serialize(long_str, max_length=100)) == 100
+    truncated = _safe_serialize(long_str, max_length=100)
+    assert truncated.endswith("...[truncated]")
+    assert len(truncated) == 100
+
+
+def test_redact_sensitive_keys():
+    """测试敏感键名脱敏。"""
+    from agentpulse.decorators import _safe_serialize
+
+    result = _safe_serialize({"password": "secret123", "name": "alice"})
+    assert "***REDACTED***" in result
+    assert "secret123" not in result
+    assert "alice" in result
 
 
 def test_otlp_endpoint_building():
     """测试 OTLP endpoint 构造逻辑。"""
     client = Client(ClientConfig(endpoint="http://localhost:8080"))
     endpoint = client._build_otlp_endpoint()
-    assert ":4318" in endpoint
-    assert endpoint.endswith("/v1/traces")
+    assert endpoint == "http://localhost:4318/v1/traces"
 
-    # 自定义端口
     client2 = Client(ClientConfig(endpoint="http://otel-collector:4318"))
-    endpoint2 = client2._build_otlp_endpoint()
-    assert endpoint2.endswith("/v1/traces")
+    assert client2._build_otlp_endpoint() == "http://otel-collector:4318/v1/traces"
+
+    client3 = Client(ClientConfig(endpoint="http://[::1]:8080"))
+    assert client3._build_otlp_endpoint() == "http://[::1]:4318/v1/traces"
+
+    client4 = Client(ClientConfig(endpoint="http://collector:4318/v1/traces"))
+    assert client4._build_otlp_endpoint() == "http://collector:4318/v1/traces"
+
+
+def test_otlp_endpoint_rejects_duplicate_path():
+    """已含 /v1/traces 中间路径的 endpoint 应拒绝。"""
+    client = Client(ClientConfig(endpoint="http://host/api/v1/traces/extra"))
+    with pytest.raises(ValueError, match="/v1/traces"):
+        client._build_otlp_endpoint()
+
+
+def test_api_key_validation():
+    """测试 API Key 格式校验。"""
+    with pytest.raises(ValueError, match="api_key"):
+        init(api_key="short")
+
+    client = init(api_key="ap-test-key-1234567", endpoint="http://localhost:8080")
+    assert client.config.api_key == "ap-test-key-1234567"
+    shutdown()
 
 
 if __name__ == "__main__":
