@@ -196,6 +196,8 @@ func parseLevelUnsafe(level Level) zerolog.Level {
 	switch strings.ToLower(string(level)) {
 	case "debug":
 		return zerolog.DebugLevel
+	case "info":
+		return zerolog.InfoLevel
 	case "warn", "warning":
 		return zerolog.WarnLevel
 	case "error":

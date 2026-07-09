@@ -46,6 +46,10 @@ func (h *ClusterHandler) List(c *gin.Context) {
 // Get 查询单个聚类。
 func (h *ClusterHandler) Get(c *gin.Context) {
 	clusterID := c.Param("cluster_id")
+	if clusterID == "" {
+		BadRequest(c, "cluster_id is required")
+		return
+	}
 
 	cluster, err := h.services.ClusterService.GetCluster(c.Request.Context(), clusterID)
 	if err != nil {

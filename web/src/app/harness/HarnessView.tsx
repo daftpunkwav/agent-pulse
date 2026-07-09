@@ -36,8 +36,10 @@ export function HarnessView() {
       setActiveAgent(safe);
     } else if (value.trim()) {
       setValidationError("Agent 名称仅允许小写字母、数字和连字符");
+      setActiveAgent("");
     } else {
       setValidationError(null);
+      setActiveAgent("");
     }
   };
 

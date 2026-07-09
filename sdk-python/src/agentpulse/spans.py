@@ -187,8 +187,9 @@ class SpanWrapper:
         if args is not None:
             import json
             try:
-                self._span.set_attribute("ap.tool_args", json.dumps(args, default=str)[:1000])
-            except Exception:  # pylint: disable=broad-except
+                self._span.set_attribute("ap.tool_args", json.dumps(args, default=str, ensure_ascii=False)[:1000])
+            except (TypeError, ValueError):
+                # 工具参数不可 JSON 序列化时跳过，不应阻塞主流程
                 pass
         if result_preview:
             self._span.set_attribute("ap.tool_result_preview", result_preview[:1000])

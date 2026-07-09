@@ -106,7 +106,7 @@ func (r *PostgresMetadataRepo) GetHarnessVersion(ctx context.Context, agentName 
 		&createdAt, &promotedAt,
 	)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
@@ -263,7 +263,7 @@ func (r *PostgresMetadataRepo) GetABTest(ctx context.Context, id string) (*domai
 		&traffic, &status, &startedAt, &endedAt, &resultJSON, &metadataJSON, &createdAt,
 	)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err

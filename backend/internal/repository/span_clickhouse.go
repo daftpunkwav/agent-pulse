@@ -274,6 +274,9 @@ func (r *ClickHouseSpanRepo) ListAllInWindow(ctx context.Context, opts domain.Li
 }
 
 // GetTraceTree 查询完整调用树。
+//
+// 实现说明：父子关系存储在临时 `children` 切片（而非 `Attributes`），
+// 避免污染业务字段 `ap.*` 与持久化层。
 func (r *ClickHouseSpanRepo) GetTraceTree(ctx context.Context, traceID string) (*domain.TraceTree, error) {
 	spans, err := r.GetByTraceID(ctx, traceID)
 	if err != nil {
@@ -293,28 +296,55 @@ func (r *ClickHouseSpanRepo) GetTraceTree(ctx context.Context, traceID string) (
 		AllSpans:  spans,
 	}
 
-	// 构建 Span Tree
+	// children 用本地 map 暂存，序列化时合并进 Span。
+	type childEntry struct {
+		child  *domain.Span
+		parent *domain.Span
+	}
+	childByParent := make(map[string][]*domain.Span, len(spans))
 	spanMap := make(map[string]*domain.Span, len(spans))
 	for _, s := range spans {
 		spanMap[s.ID] = s
 	}
 
+	maxDepth := 0
 	for _, s := range spans {
-		if s.ParentSpanID == "" {
+		if s.ParentSpanID != "" {
+			if parent, ok := spanMap[s.ParentSpanID]; ok {
+				childByParent[parent.ID] = append(childByParent[parent.ID], s)
+			}
+		} else {
 			tree.Root = s
-		} else if parent, ok := spanMap[s.ParentSpanID]; ok {
-			// 父子关系通过 Attributes 字段传递（避免破坏领域模型）
-			if parent.Attributes == nil {
-				parent.Attributes = map[string]any{}
-			}
-			if _, exists := parent.Attributes["_children"]; !exists {
-				parent.Attributes["_children"] = []*domain.Span{}
-			}
-			children := parent.Attributes["_children"].([]*domain.Span)
-			children = append(children, s)
-			parent.Attributes["_children"] = children
 		}
-		tree.Depth++
+	}
+
+	// 计算最大深度（root -> leaf）。
+	var computeDepth func(span *domain.Span, depth int) int
+	computeDepth = func(span *domain.Span, depth int) int {
+		kids := childByParent[span.ID]
+		if len(kids) == 0 {
+			return depth
+		}
+		max := depth
+		for _, k := range kids {
+			if d := computeDepth(k, depth+1); d > max {
+				max = d
+			}
+		}
+		return max
+	}
+	if tree.Root != nil {
+		maxDepth = computeDepth(tree.Root, 1)
+	}
+	tree.Depth = maxDepth
+
+	// 将 children 写入 Span 的 Attributes（仅本次响应，不持久化）。
+	for parentID, kids := range childByParent {
+		parent := spanMap[parentID]
+		if parent.Attributes == nil {
+			parent.Attributes = map[string]any{}
+		}
+		parent.Attributes["_children"] = kids
 	}
 
 	return tree, nil

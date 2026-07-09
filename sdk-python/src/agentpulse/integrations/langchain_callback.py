@@ -159,12 +159,15 @@ def _make_callback_class() -> type:
         ) -> None:
             wrapper = self._start_span(run_id, "llm", "llm", parent_run_id)
             wrapper.set_input("\n".join(prompts)[:4000])
-            model = ""
-            if serialized:
-                model = str(
-                    serialized.get("kwargs", {}).get("model_name")
+            # 兼容新旧 langchain：kwargs.model_name（老版）/ kwargs.model（新版）
+            serialized_kwargs = serialized.get("kwargs", {}) if serialized else {}
+            model = (
+                str(serialized_kwargs.get("model_name")
+                    or serialized_kwargs.get("model")
                     or serialized.get("name", "")
-                )
+                    or "")
+                if serialized else ""
+            )
             if model:
                 wrapper.set_attribute("ap.model", model)
 

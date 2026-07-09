@@ -7,6 +7,7 @@ const ALLOWED_API_PREFIXES = [
   "eval",
   "clusters",
   "harness",
+  "abtests",
 ];
 
 function getBackendBase() {
