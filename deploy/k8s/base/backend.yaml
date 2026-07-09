@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentpulse
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agentpulse-backend-config
+  namespace: agentpulse
+data:
+  config.yaml: |
+    server:
+      mode: release
+      port: 8080
+      allowed_origins:
+        - http://localhost:3000
+    otlp:
+      http_port: 4318
+      max_body_size: 10485760
+    auth:
+      enabled: true
+      otlp_require_key: true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agentpulse-secrets
+  namespace: agentpulse
+type: Opaque
+stringData:
+  postgres-password: changeme-replace-in-production
+  clickhouse-password: changeme-replace-in-production
+  api-keys: ap-dev-key-replace-me-01
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentpulse-backend
+  namespace: agentpulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agentpulse-backend
+  template:
+    metadata:
+      labels:
+        app: agentpulse-backend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+      containers:
+        - name: backend
+          image: agentpulse/backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 4318
+              name: otlp
+          env:
+            - name: AGENTPULSE_AUTH_API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: agentpulse-secrets
+                  key: api-keys
+          volumeMounts:
+            - name: config
+              mountPath: /app/configs/config.yaml
+              subPath: config.yaml
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: config
+          configMap:
+            name: agentpulse-backend-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentpulse-backend
+  namespace: agentpulse
+spec:
+  selector:
+    app: agentpulse-backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: otlp
+      port: 4318
+      targetPort: 4318

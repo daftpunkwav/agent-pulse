@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS agent_spans (
     output_preview     String DEFAULT '' CODEC(ZSTD(1)),
     error_message      String DEFAULT '' CODEC(ZSTD(1)),
 
-    -- 灵活属性（JSON）
+    -- 灵活属性（JSON 字符串，应用层解析）
     attributes         String DEFAULT '{}' CODEC(ZSTD(1))
 )
 ENGINE = MergeTree()

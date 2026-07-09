@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.gitignore
+*.md
+.env
+.env.*
+!.env.example
+sdk-python/.venv
+backend/data
+deploy/data
+**/__pycache__
+*.pyc
+.pytest_cache
+coverage
+dist
+build

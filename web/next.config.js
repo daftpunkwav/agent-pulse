@@ -21,6 +21,7 @@ function getBackendBase() {
 
 const nextConfig = {
   reactStrictMode: true,
+  output: "standalone",
   async rewrites() {
     const backend = getBackendBase();
     const rules = ALLOWED_API_PREFIXES.flatMap((prefix) => [

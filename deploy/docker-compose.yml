@@ -1,31 +1,28 @@
 # =============================================================================
 # AgentPulse 本地开发基础设施
 # =============================================================================
-# 启动所有依赖服务：
-#   docker compose up -d
+# 启动：docker compose up -d
+# 停止：docker compose down
+# 重置：docker compose down -v
 #
-# 停止：
-#   docker compose down
-#
-# 重置数据（删除所有持久化数据）：
-#   docker compose down -v
+# 安全说明：
+#   - 所有端口绑定 127.0.0.1，避免意外暴露到公网
+#   - 密码通过 .env 文件注入，禁止使用默认 changeme 上生产
 # =============================================================================
 
 services:
-  # ---------------------------------------------------------------------------
-  # ClickHouse - Trace 存储（OLAP）
-  # ---------------------------------------------------------------------------
   clickhouse:
     image: clickhouse/clickhouse-server:24.3
     container_name: agentpulse-clickhouse
     restart: unless-stopped
     ports:
-      - "9000:9000"     # Native protocol
-      - "8123:8123"     # HTTP interface
-      - "9009:9009"     # Interserver replication
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9009:9009"
     environment:
       CLICKHOUSE_DB: agentpulse
-      CLICKHOUSE_USER: default
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ulimits:
       nofile:
@@ -35,67 +32,60 @@ services:
       - ./data/clickhouse:/var/lib/clickhouse
       - ./init/clickhouse:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
-      interval: 10s
-      timeout: 5s
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- 'http://localhost:8123/?query=SELECT%20count()%20FROM%20agentpulse.agent_spans' || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 40s
 
-  # ---------------------------------------------------------------------------
-  # PostgreSQL - 元数据存储
-  # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
     container_name: agentpulse-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_DB: agentpulse
-      POSTGRES_USER: agentpulse
-      POSTGRES_PASSWORD: changeme
+      POSTGRES_USER: ${POSTGRES_USER:-agentpulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./init/postgres:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentpulse -d agentpulse"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-agentpulse} -d agentpulse && psql -U ${POSTGRES_USER:-agentpulse} -d agentpulse -c 'SELECT 1 FROM evaluations LIMIT 0' || exit 1",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 15s
 
-  # ---------------------------------------------------------------------------
-  # Chroma - 向量存储（失败聚类）
-  # ---------------------------------------------------------------------------
   chroma:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:0.5.23
     container_name: agentpulse-chroma
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       ANONYMIZED_TELEMETRY: "False"
       IS_PERSISTENT: "TRUE"
+      CHROMA_SERVER_AUTHN_CREDENTIALS: ${CHROMA_AUTH_TOKEN:?CHROMA_AUTH_TOKEN is required}
+      CHROMA_SERVER_AUTHN_PROVIDER: chromadb.auth.token_authn.TokenAuthenticationServerProvider
     volumes:
       - ./data/chroma:/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
-  # ---------------------------------------------------------------------------
-  # (可选) OTEL Collector - 标准 OTLP 入口
-  # 如果想直接对接 OTel 标准生态，可启用此服务
-  # ---------------------------------------------------------------------------
-  # otel-collector:
-  #   image: otel/opentelemetry-collector-contrib:0.96.0
-  #   container_name: agentpulse-otel-collector
-  #   command: ["--config=/etc/otel-collector-config.yaml"]
-  #   volumes:
-  #     - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
-  #   ports:
-  #     - "4317:4317"   # OTLP gRPC
-  #     - "4318:4318"   # OTLP HTTP
-
-# =============================================================================
-# 网络 - 所有服务在默认 bridge 网络即可互通
-# =============================================================================
 networks:
   default:
     name: agentpulse-net

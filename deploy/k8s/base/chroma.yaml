@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentpulse-chroma
+  namespace: agentpulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agentpulse-chroma
+  template:
+    metadata:
+      labels:
+        app: agentpulse-chroma
+    spec:
+      containers:
+        - name: chroma
+          image: chromadb/chroma:0.5.23
+          ports:
+            - containerPort: 8000
+          env:
+            - name: IS_PERSISTENT
+              value: "TRUE"
+            - name: ANONYMIZED_TELEMETRY
+              value: "False"
+          volumeMounts:
+            - name: data
+              mountPath: /chroma/chroma
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /api/v1/heartbeat
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /api/v1/heartbeat
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentpulse-chroma
+  namespace: agentpulse
+spec:
+  selector:
+    app: agentpulse-chroma
+  ports:
+    - port: 8000
+      targetPort: 8000

@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS evaluations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_evaluations_session_id ON evaluations(session_id);
+CREATE INDEX IF NOT EXISTS idx_evaluations_span_id ON evaluations(span_id);
 CREATE INDEX IF NOT EXISTS idx_evaluations_user_id ON evaluations(user_id);
 CREATE INDEX IF NOT EXISTS idx_evaluations_agent_name ON evaluations(agent_name);
 CREATE INDEX IF NOT EXISTS idx_evaluations_created_at ON evaluations(created_at);
