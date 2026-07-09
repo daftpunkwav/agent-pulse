@@ -1,8 +1,8 @@
 -- =============================================================================
-# AgentPulse ClickHouse 初始化脚本
-# =============================================================================
-# 此脚本在 ClickHouse 容器首次启动时自动执行
-# =============================================================================
+-- AgentPulse ClickHouse 初始化脚本
+-- =============================================================================
+-- 此脚本在 ClickHouse 容器首次启动时自动执行
+-- =============================================================================
 
 -- 创建数据库（如不存在）
 CREATE DATABASE IF NOT EXISTS agentpulse;
@@ -74,31 +74,8 @@ ALTER TABLE agent_spans ADD INDEX IF NOT EXISTS idx_status status TYPE bloom_fil
 ALTER TABLE agent_spans ADD INDEX IF NOT EXISTS idx_tool_name tool_name TYPE bloom_filter(0.01) GRANULARITY 4;
 
 -- ============================================================================
-# sessions_materialized - 会话汇总（物化视图）
-# ============================================================================
-# 自动从 agent_spans 聚合会话级别统计
-# ============================================================================
-CREATE MATERIALIZED VIEW IF NOT EXISTS sessions_mv
-TO sessions AS
-SELECT
-    session_id,
-    user_id,
-    agent_name,
-    service_name,
-    min(timestamp) AS started_at,
-    max(timestamp) AS ended_at,
-    count() AS span_count,
-    sum(prompt_tokens) AS total_prompt_tokens,
-    sum(completion_tokens) AS total_completion_tokens,
-    sum(total_tokens) AS total_tokens,
-    sum(cost_usd) AS total_cost_usd,
-    sum(latency_ms) AS total_latency_ms,
-    countIf(status = 'error') AS error_count,
-    countIf(status = 'timeout') AS timeout_count
-FROM agent_spans
-WHERE session_id != ''
-GROUP BY session_id, user_id, agent_name, service_name;
-
+-- sessions - 会话汇总表（物化视图目标表，须先于 MV 创建）
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS sessions (
     session_id           String,
     user_id              String,
@@ -119,3 +96,27 @@ ENGINE = SummingMergeTree()
 ORDER BY (user_id, session_id)
 PARTITION BY toYYYYMM(started_at)
 TTL toDateTime(started_at) + INTERVAL 365 DAY;
+
+-- ============================================================================
+-- sessions_mv - 会话汇总物化视图
+-- ============================================================================
+CREATE MATERIALIZED VIEW IF NOT EXISTS sessions_mv
+TO sessions AS
+SELECT
+    session_id,
+    user_id,
+    agent_name,
+    service_name,
+    min(timestamp) AS started_at,
+    max(timestamp) AS ended_at,
+    count() AS span_count,
+    sum(prompt_tokens) AS total_prompt_tokens,
+    sum(completion_tokens) AS total_completion_tokens,
+    sum(total_tokens) AS total_tokens,
+    sum(cost_usd) AS total_cost_usd,
+    sum(latency_ms) AS total_latency_ms,
+    countIf(status = 'error') AS error_count,
+    countIf(status = 'timeout') AS timeout_count
+FROM agent_spans
+WHERE session_id != ''
+GROUP BY session_id, user_id, agent_name, service_name;

@@ -1,19 +1,19 @@
 -- =============================================================================
-# AgentPulse PostgreSQL 初始化脚本
-# =============================================================================
+-- AgentPulse PostgreSQL 初始化脚本
+-- =============================================================================
 
 -- 启用必要扩展
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- ============================================================================
-# evaluations - LLM-as-Judge 评估结果
-# ============================================================================
+-- evaluations - LLM-as-Judge 评估结果
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS evaluations (
     id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     span_id           VARCHAR(64) NOT NULL,
     trace_id          VARCHAR(64) NOT NULL,
-    session_id        UUID NOT NULL,
+    session_id        VARCHAR(64) NOT NULL,
     user_id           VARCHAR(64) NOT NULL,
     agent_name        VARCHAR(64) NOT NULL,
 
@@ -44,8 +44,8 @@ CREATE INDEX IF NOT EXISTS idx_evaluations_agent_name ON evaluations(agent_name)
 CREATE INDEX IF NOT EXISTS idx_evaluations_created_at ON evaluations(created_at);
 
 -- ============================================================================
-# failure_clusters - 失败模式聚类
-# ============================================================================
+-- failure_clusters - 失败模式聚类
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS failure_clusters (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     cluster_name    VARCHAR(128) NOT NULL,
@@ -65,8 +65,8 @@ CREATE INDEX IF NOT EXISTS idx_failure_clusters_active ON failure_clusters(is_ac
 CREATE INDEX IF NOT EXISTS idx_failure_clusters_created_at ON failure_clusters(created_at);
 
 -- ============================================================================
-# harness_configs - Harness 配置版本
-# ============================================================================
+-- harness_configs - Harness 配置版本
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS harness_configs (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     agent_name      VARCHAR(64) NOT NULL,
@@ -86,8 +86,8 @@ CREATE INDEX IF NOT EXISTS idx_harness_configs_agent_name ON harness_configs(age
 CREATE INDEX IF NOT EXISTS idx_harness_configs_status ON harness_configs(status);
 
 -- ============================================================================
-# ab_tests - A/B 测试
-# ============================================================================
+-- ab_tests - A/B 测试
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS ab_tests (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name                VARCHAR(128) NOT NULL,
@@ -107,8 +107,8 @@ CREATE INDEX IF NOT EXISTS idx_ab_tests_status ON ab_tests(status);
 CREATE INDEX IF NOT EXISTS idx_ab_tests_agent_name ON ab_tests(agent_name);
 
 -- ============================================================================
-# model_pricing - LLM 模型价格表（版本化）
-# ============================================================================
+-- model_pricing - LLM 模型价格表（版本化）
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS model_pricing (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     model_name      VARCHAR(64) NOT NULL,

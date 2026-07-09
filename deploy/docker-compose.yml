@@ -29,13 +29,14 @@ services:
         soft: 262144
         hard: 262144
     volumes:
-      - ./data/clickhouse:/var/lib/clickhouse
+      # 用命名卷避免 Windows bind mount 上 ClickHouse 内部 rename 失败 (Permission denied)
+      - clickhouse-data:/var/lib/clickhouse
       - ./init/clickhouse:/docker-entrypoint-initdb.d
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- 'http://localhost:8123/?query=SELECT%20count()%20FROM%20agentpulse.agent_spans' || exit 1",
+          "clickhouse-client --user \"$$CLICKHOUSE_USER\" --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT count() FROM agentpulse.agent_spans' || exit 1",
         ]
       interval: 15s
       timeout: 10s
@@ -89,3 +90,6 @@ services:
 networks:
   default:
     name: agentpulse-net
+
+volumes:
+  clickhouse-data:
