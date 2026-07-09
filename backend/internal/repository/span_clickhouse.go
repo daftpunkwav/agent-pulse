@@ -106,7 +106,9 @@ func (r spanRow) toDomain() *domain.Span {
 		s.EndTime = s.StartTime.Add(time.Duration(r.LatencyMs) * time.Millisecond)
 	}
 	if r.Attributes != "" {
-		_ = json.Unmarshal([]byte(r.Attributes), &s.Attributes)
+		if err := json.Unmarshal([]byte(r.Attributes), &s.Attributes); err != nil {
+			s.ErrorMessage = fmt.Sprintf("parse attributes: %v", err)
+		}
 	}
 	return s
 }

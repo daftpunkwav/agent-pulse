@@ -24,6 +24,7 @@ type SpanService struct {
 
 	// 异步写入
 	batchQueue  chan *domain.Span
+	batchSize   int
 	workerCount int
 	workerWG    sync.WaitGroup
 
@@ -55,6 +56,7 @@ func NewSpanService(repo domain.SpanRepository, pricingRepo domain.PricingReposi
 		pricingRepo: pricingRepo,
 		logger:      log.WithFields(map[string]any{"component": "span_service"}),
 		batchQueue:  make(chan *domain.Span, cfg.QueueSize),
+		batchSize:   cfg.BatchSize,
 		workerCount: cfg.WorkerCount,
 		closed:      make(chan struct{}),
 	}
@@ -154,7 +156,7 @@ func (s *SpanService) ListByAgent(ctx context.Context, agentName string, opts do
 func (s *SpanService) batchWorker(id int) {
 	defer s.workerWG.Done()
 
-	batch := make([]*domain.Span, 0, 100)
+	batch := make([]*domain.Span, 0, s.batchSize)
 	flushTick := time.NewTicker(5 * time.Second)
 	defer flushTick.Stop()
 
@@ -162,7 +164,7 @@ func (s *SpanService) batchWorker(id int) {
 		select {
 		case span := <-s.batchQueue:
 			batch = append(batch, span)
-			if len(batch) >= 100 {
+			if len(batch) >= s.batchSize {
 				s.flush(id, batch)
 				batch = batch[:0]
 			}
