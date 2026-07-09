@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/agentpulse/backend/internal/domain"
@@ -158,7 +159,7 @@ func (r *PostgresEvaluationRepo) GetByID(ctx context.Context, id string) (*domai
 	var row evaluationRow
 	pgxRow := r.client.Pool().QueryRow(ctx, query, id)
 	if err := row.scan(pgxRow); err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
@@ -173,7 +174,7 @@ func (r *PostgresEvaluationRepo) GetBySpanID(ctx context.Context, spanID string)
 	var row evaluationRow
 	pgxRow := r.client.Pool().QueryRow(ctx, query, spanID)
 	if err := row.scan(pgxRow); err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err

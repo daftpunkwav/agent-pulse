@@ -2,7 +2,6 @@
 package repository
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -214,6 +213,3 @@ func (r *ChromaVectorRepo) Delete(ctx context.Context, collection string, id str
 
 	return nil
 }
-
-// 防止 unused import 警告
-var _ = bytes.NewReader
