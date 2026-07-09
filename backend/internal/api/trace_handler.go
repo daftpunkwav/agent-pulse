@@ -33,6 +33,11 @@ func (h *TraceHandler) GetTraceTree(c *gin.Context) {
 		BadRequest(c, "trace_id is required")
 		return
 	}
+	// trace_id 是 32 位十六进制字符串（来自 OTLP），白名单约束防止下游问题。
+	if !isValidHexTraceID(traceID) {
+		BadRequest(c, "trace_id must be a 32-char hex string")
+		return
+	}
 
 	tree, err := h.services.SpanService.GetTraceTree(c.Request.Context(), traceID)
 	if err != nil {

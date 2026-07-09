@@ -76,6 +76,9 @@ type CreateVersionRequest struct {
 	CreatedBy  string `json:"created_by"`
 }
 
+// MaxConfigYAMLBytes 限制单版本 config_yaml 大小（防止 OOM 与超大行写入）。
+const MaxConfigYAMLBytes = 256 * 1024
+
 // CreateVersion 创建新版本。
 func (h *HarnessHandler) CreateVersion(c *gin.Context) {
 	agentName := c.Param("agent_name")
@@ -83,6 +86,11 @@ func (h *HarnessHandler) CreateVersion(c *gin.Context) {
 	var req CreateVersionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		BadRequest(c, err.Error())
+		return
+	}
+
+	if len(req.ConfigYAML) > MaxConfigYAMLBytes {
+		BadRequest(c, "config_yaml exceeds 256KB")
 		return
 	}
 
@@ -110,6 +118,26 @@ func (h *HarnessHandler) PromoteVersion(c *gin.Context) {
 	version := parseIntDefault(c.Param("version"), 0)
 	if version <= 0 {
 		BadRequest(c, "invalid version")
+		return
+	}
+
+	// 提升前校验：版本必须存在且当前不是 production。
+	existing, err := h.services.MetadataRepo.GetHarnessVersion(c.Request.Context(), agentName, version)
+	if err != nil {
+		InternalErrorLog(c, h.logger, err)
+		return
+	}
+	if existing == nil {
+		NotFound(c, "harness version not found")
+		return
+	}
+	if existing.Status == domain.HarnessProduction {
+		c.JSON(http.StatusOK, gin.H{
+			"agent":   agentName,
+			"version": version,
+			"status":  domain.HarnessProduction,
+			"note":    "already in production",
+		})
 		return
 	}
 
@@ -226,6 +254,19 @@ func (h *ABTestHandler) Create(c *gin.Context) {
 	var req CreateABTestRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		BadRequest(c, err.Error())
+		return
+	}
+
+	if req.ControlVersion == req.TreatmentVersion {
+		BadRequest(c, "control_version and treatment_version must differ")
+		return
+	}
+	if req.ControlVersion <= 0 || req.TreatmentVersion <= 0 {
+		BadRequest(c, "control_version and treatment_version must be positive")
+		return
+	}
+	if len(req.Name) > 128 {
+		BadRequest(c, "name exceeds 128 characters")
 		return
 	}
 

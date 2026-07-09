@@ -93,6 +93,10 @@ func (h *EvalHandler) ListByAgent(c *gin.Context) {
 //     etc.) from being sent to the external Judge provider.
 func (h *EvalHandler) EvaluateNow(c *gin.Context) {
 	spanID := c.Param("span_id")
+	if !isValidHexTraceID(spanID) && !isShortSpanID(spanID) {
+		BadRequest(c, "span_id must be hex")
+		return
+	}
 
 	span, err := h.services.SpanService.GetByID(c.Request.Context(), spanID)
 	if err != nil {

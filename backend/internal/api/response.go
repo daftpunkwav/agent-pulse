@@ -107,3 +107,29 @@ func parseTime(s string) (time.Time, bool) {
 	}
 	return time.Time{}, false
 }
+
+// isValidHexTraceID 校验 OTLP trace_id 格式：32 位十六进制。
+func isValidHexTraceID(s string) bool {
+	if len(s) != 32 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+// isShortSpanID 校验 OTLP span_id 格式：16 位十六进制。
+func isShortSpanID(s string) bool {
+	if len(s) != 16 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
