@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	collectorpb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -144,10 +145,19 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.writeSuccess(w, len(spans), "")
 }
 
-// clientIP 提取客户端 IP(优先 X-Forwarded-For,其次 RemoteAddr)。
+// clientIP 提取客户端 IP。
+//
+// 优先使用 X-Forwarded-For（仅取第一个 IP），
+// 该 header 由可信反向代理设置；若无则使用 RemoteAddr。
+// 注意：直接暴露给客户端的场景下 X-Forwarded-For 不可信，
+// 生产环境应部署反向代理并配置可信代理白名单。
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return xff
+		// 取第一个 IP（最接近客户端的代理）
+		if i := strings.Index(xff, ","); i >= 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
 	}
 	return r.RemoteAddr
 }

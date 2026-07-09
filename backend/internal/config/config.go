@@ -167,14 +167,20 @@ type ChromaConfig struct {
 	APIKey   string `mapstructure:"api_key"`
 	Tenant   string `mapstructure:"tenant"`
 	Database string `mapstructure:"database"`
+	// TLSEnabled 是否启用 TLS 连接（生产环境建议 true）。
+	TLSEnabled bool `mapstructure:"tls_enabled"`
 }
 
-// BaseURL 返回 Chroma 服务 URL。
+// BaseURL 返回 Chroma 服务 URL（根据 TLS 配置选择协议）。
 func (c ChromaConfig) BaseURL() string {
 	if c.Host == "" {
 		return ""
 	}
-	return fmt.Sprintf("http://%s:%d", c.Host, c.Port)
+	protocol := "http"
+	if c.TLSEnabled {
+		protocol = "https"
+	}
+	return fmt.Sprintf("%s://%s:%d", protocol, c.Host, c.Port)
 }
 
 // JudgeConfig LLM-as-Judge 评估器配置。
@@ -295,6 +301,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("chroma.port", 8000)
 	v.SetDefault("chroma.tenant", "default_tenant")
 	v.SetDefault("chroma.database", "default_database")
+	v.SetDefault("chroma.tls_enabled", false)
 
 	// Judge
 	v.SetDefault("judge.model", "gpt-4o-mini")

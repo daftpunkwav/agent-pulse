@@ -1,0 +1,84 @@
+# =============================================================================
+# AgentPulse 开发环境配置文件
+# =============================================================================
+# 警告：此文件包含开发用默认值，禁止直接用于生产环境！
+#
+# 生产部署要求：
+#   1. server.mode 必须为 "release"
+#   2. auth.enabled 必须为 true，并配置强 API Key
+#   3. 所有密码/密钥必须使用强随机值，通过环境变量注入
+#   4. allowed_origins 必须显式列出前端 origin（禁止使用 "*"）
+#   5. postgres.ssl_mode 建议 "require" 或更高
+#   6. clickhouse.tls_enabled 建议 true
+#   7. chroma.tls_enabled 建议 true（如使用远程 Chroma）
+# =============================================================================
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  mode: "debug"
+  read_timeout: "30s"
+  write_timeout: "30s"
+  shutdown_timeout: "30s"
+  allowed_origins: "*"
+
+log:
+  level: "info"
+  format: "console"
+
+auth:
+  enabled: false
+  api_keys: []
+  otlp_require_key: false
+
+clickhouse:
+  host: "localhost"
+  port: 9000
+  database: "agentpulse"
+  username: "default"
+  password: "clickhouse_dev"
+  max_open_conns: 20
+  max_idle_conns: 10
+  tls_enabled: false
+
+postgres:
+  host: "localhost"
+  port: 5432
+  database: "agentpulse"
+  username: "agentpulse"
+  password: "postgres_dev"
+  ssl_mode: "disable"
+  max_open_conns: 20
+  max_idle_conns: 10
+  max_lifetime: "1h"
+
+chroma:
+  host: "localhost"
+  port: 8000
+  api_key: "chroma-dev-token"
+  tenant: "default_tenant"
+  database: "default_database"
+
+judge:
+  model: "gpt-4o-mini"
+  api_key: "sk-local-dev-placeholder-please-replace"
+  base_url: "https://api.openai.com/v1"
+  timeout: "60s"
+  max_retries: 3
+  concurrency: 5
+
+otlp:
+  grpc_port: 4317
+  http_port: 4318
+
+evaluation:
+  sample_rate: 1.0
+  async_workers: 3
+  async_queue_size: 1000
+  default_dimensions:
+    - "accuracy"
+    - "completeness"
+    - "tool_selection"
+    - "reasoning_depth"
+    - "helpfulness"
+  cache_ttl: "24h"
