@@ -319,6 +319,6 @@ def shutdown() -> None:
     """关闭全局客户端，刷新所有缓冲 Span。"""
     if Client._instance is None:
         return
-    Client._instance.shutdown()
-    with Client._lock:
-        Client._instance = None
+    instance = Client._instance
+    Client._instance = None
+    instance.shutdown()
