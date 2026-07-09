@@ -137,6 +137,16 @@ func (s *SpanService) ListBySession(ctx context.Context, sessionID string, opts 
 	return s.repo.ListBySession(ctx, sessionID, opts)
 }
 
+// ListByUser 查询用户。
+func (s *SpanService) ListByUser(ctx context.Context, userID string, opts domain.ListOptions) ([]*domain.Span, error) {
+	return s.repo.ListByUser(ctx, userID, opts)
+}
+
+// ListByAgent 查询 Agent。
+func (s *SpanService) ListByAgent(ctx context.Context, agentName string, opts domain.ListOptions) ([]*domain.Span, error) {
+	return s.repo.ListByAgent(ctx, agentName, opts)
+}
+
 // ---------------------------------------------------------------------------
 // 内部：批量写入 worker
 // ---------------------------------------------------------------------------

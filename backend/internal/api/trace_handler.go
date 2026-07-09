@@ -82,7 +82,7 @@ func (h *TraceHandler) ListByUser(c *gin.Context) {
 		return
 	}
 
-	spans, err := h.services.SpanRepo.ListByUser(c.Request.Context(), userID, opts)
+	spans, err := h.services.SpanService.ListByUser(c.Request.Context(), userID, opts)
 	if err != nil {
 		InternalErrorLog(c, h.logger, err)
 		return
@@ -102,7 +102,7 @@ func (h *TraceHandler) ListByAgent(c *gin.Context) {
 		return
 	}
 
-	spans, err := h.services.SpanRepo.ListByAgent(c.Request.Context(), agentName, opts)
+	spans, err := h.services.SpanService.ListByAgent(c.Request.Context(), agentName, opts)
 	if err != nil {
 		InternalErrorLog(c, h.logger, err)
 		return

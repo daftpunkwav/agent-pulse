@@ -297,12 +297,21 @@ func (r *PostgresMetadataRepo) GetABTest(ctx context.Context, id string) (*domai
 
 // ListABTests 列出 A/B 测试。
 func (r *PostgresMetadataRepo) ListABTests(ctx context.Context, opts domain.ListOptions) ([]*domain.ABTest, error) {
-	const query = `SELECT
+	limit := opts.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	offset := opts.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	query := `SELECT
 		id::text, name, agent_name, control_version, treatment_version,
 		traffic_percent, status, started_at, ended_at, result, metadata, created_at
-	FROM ab_tests ORDER BY created_at DESC LIMIT 100`
+	FROM ab_tests ORDER BY created_at DESC LIMIT $1 OFFSET $2`
 
-	rows, err := r.client.Pool().Query(ctx, query)
+	rows, err := r.client.Pool().Query(ctx, query, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query ab tests: %w", err)
 	}

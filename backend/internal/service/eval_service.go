@@ -193,7 +193,7 @@ func (s *EvalService) evaluate(ctx context.Context, span *domain.Span) (*domain.
 	prompt := buildJudgePrompt(input)
 
 	resp, err := s.judgeClient.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model: openai.GPT4oMini,
+		Model: s.judgeModel,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleSystem, Content: judgeSystemPrompt},
 			{Role: openai.ChatMessageRoleUser, Content: prompt},

@@ -191,9 +191,17 @@ func (r *PostgresEvaluationRepo) ListBySession(ctx context.Context, sessionID st
 
 // ListByAgent 查询 Agent 评估历史。
 func (r *PostgresEvaluationRepo) ListByAgent(ctx context.Context, agentName string, opts domain.ListOptions) ([]*domain.Evaluation, error) {
-	query := `SELECT ` + evaluationColumns + ` FROM evaluations WHERE agent_name = $1 ORDER BY created_at DESC LIMIT 100`
+	limit := opts.Limit
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
+	offset := opts.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	query := `SELECT ` + evaluationColumns + ` FROM evaluations WHERE agent_name = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
 
-	return r.queryList(ctx, query, agentName)
+	return r.queryList(ctx, query, agentName, limit, offset)
 }
 
 // AverageScores 聚合查询各维度平均分。
