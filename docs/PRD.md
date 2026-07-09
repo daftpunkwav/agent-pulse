@@ -605,70 +605,86 @@ collection.add(
 
 ## 5. API 设计
 
+> **图例**: ✅ MVP 已实现 · ⏳ Phase 2/3 计划 · ❌ 已废弃
+> 完整已实现接口以 `backend/internal/api/router.go` 为准,见 [docs/API.md](API.md)。
+
 ### 5.1 Trace API
 
 ```http
-POST /api/v1/traces              # SDK 上报（OTLP 也支持）
-GET  /api/v1/traces              # 查询 Trace 列表
-GET  /api/v1/traces/{trace_id}   # 获取 Trace 详情（含 Span 树）
-GET  /api/v1/traces/{trace_id}/replay  # Trace 回放（重跑同一输入）
+POST /api/v1/traces              # ❌ SDK 上报使用 OTLP 端点,非本路径
+GET  /api/v1/traces              # ❌ 当前仅支持按 trace_id/session/user/agent 维度查询
+GET  /api/v1/traces/{trace_id}   # ✅ 获取 Trace 详情(含 Span 树)
+GET  /api/v1/traces/{trace_id}/replay  # ⏳ Phase 2
+GET  /api/v1/sessions/{session_id}/spans  # ✅ 替代列表查询
+GET  /api/v1/users/{user_id}/spans        # ✅
+GET  /api/v1/agents/{agent_name}/spans    # ✅
 ```
 
 ### 5.2 Cost API
 
 ```http
-GET /api/v1/cost/breakdown       # 五维归因
-GET /api/v1/cost/timeline        # 时间序列
-GET /api/v1/cost/sankey          # 桑基图数据
-GET /api/v1/cost/pricing         # 当前价格表
-PUT /api/v1/cost/pricing         # 更新价格表
+GET /api/v1/cost/breakdown       # ✅ 五维归因
+GET /api/v1/cost/timeline        # ✅ 时间序列
+GET /api/v1/cost/total           # ✅ 总成本
+GET /api/v1/cost/sankey          # ⏳ Phase 2(由 breakdown + timeline 派生)
+GET /api/v1/cost/pricing         # ⏳ Phase 2(当前由 DB 维护,无 API 暴露)
+PUT /api/v1/cost/pricing         # ⏳ Phase 2
 ```
 
 ### 5.3 Eval API
 
 ```http
-GET  /api/v1/eval/spans/{span_id}       # 单 Span 评估结果
-GET  /api/v1/eval/dashboard             # 评估 Dashboard 数据
-POST /api/v1/eval/evaluate              # 手动触发评估
-GET  /api/v1/eval/radar                 # 维度雷达图数据
+GET  /api/v1/eval/spans/{span_id}                  # ✅ 单 Span 评估结果
+GET  /api/v1/eval/agents/{agent_name}/scores       # ✅ Agent 维度平均分
+GET  /api/v1/eval/agents/{agent_name}/list         # ✅ Agent 评估列表
+POST /api/v1/eval/spans/{span_id}                  # ✅ 手动触发评估
+GET  /api/v1/eval/dashboard                        # ⏳ Phase 2
+GET  /api/v1/eval/radar                            # ⏳ Phase 2(由 scores 派生)
 ```
 
 ### 5.4 Cluster API
 
 ```http
-GET  /api/v1/clusters/recent            # 最近聚类结果
-POST /api/v1/clusters/run               # 手动触发聚类
-GET  /api/v1/clusters/{cluster_id}/traces  # 某聚类的样本 Trace
+GET  /api/v1/clusters                              # ✅ 列出聚类(默认最近)
+GET  /api/v1/clusters/{cluster_id}                 # ✅ 聚类详情
+POST /api/v1/clusters/run                          # ✅ 手动触发聚类
+GET  /api/v1/clusters/recent                       # ⏳ Phase 2(由 list 替代)
+GET  /api/v1/clusters/{cluster_id}/traces          # ⏳ Phase 2
 ```
 
 ### 5.5 Harness API
 
 ```http
-GET    /api/v1/harness/{agent_name}/versions       # 版本列表
-GET    /api/v1/harness/{agent_name}/versions/{v}  # 版本详情
-POST   /api/v1/harness/{agent_name}/versions      # 创建新版本
-PUT    /api/v1/harness/{agent_name}/versions/{v}/promote  # 设为生产
-POST   /api/v1/harness/{agent_name}/canary         # 灰度发布
-POST   /api/v1/harness/{agent_name}/rollback       # 回滚
-GET    /api/v1/harness/{agent_name}/diff/{v1}/{v2} # 版本对比
+GET    /api/v1/harness/{agent_name}/versions                  # ✅ 版本列表
+GET    /api/v1/harness/{agent_name}/versions/{version}       # ✅ 版本详情
+POST   /api/v1/harness/{agent_name}/versions                  # ✅ 创建新版本
+POST   /api/v1/harness/{agent_name}/versions/{version}/promote  # ✅ 设为生产
+GET    /api/v1/harness/{agent_name}/diff/{v1}/{v2}            # ✅ 版本对比
+POST   /api/v1/harness/{agent_name}/canary                    # ⏳ Phase 2(可由 promote + traffic_percent 组合实现)
+POST   /api/v1/harness/{agent_name}/rollback                  # ⏳ Phase 2(可由 promote 旧版本实现)
 ```
 
 ### 5.6 AB Test API
 
 ```http
-POST /api/v1/abtests                # 创建 A/B 测试
-GET  /api/v1/abtests                # 列出测试
-GET  /api/v1/abtests/{id}           # 测试详情
-GET  /api/v1/abtests/{id}/report    # 测试报告
-POST /api/v1/abtests/{id}/abort     # 中止测试
+POST /api/v1/abtests                # ✅ 创建 A/B 测试
+GET  /api/v1/abtests                # ✅ 列出测试
+GET  /api/v1/abtests/{test_id}      # ✅ 测试详情
+GET  /api/v1/abtests/{id}/report    # ⏳ Phase 2
+POST /api/v1/abtests/{id}/abort     # ⏳ Phase 2
 ```
 
 ### 5.7 OTLP 接收
 
 ```
-gRPC: 0.0.0.0:4317  (OpenTelemetry 标准)
-HTTP: 0.0.0.0:4318  (OpenTelemetry 标准)
+gRPC: 0.0.0.0:4317  # ⏳ Phase 2 计划,当前未实现
+HTTP: 0.0.0.0:4318  # ✅ OpenTelemetry OTLP/HTTP
 ```
+
+**当前 OTLP 接收器要求**:
+- `X-AgentPulse-Key` 头必须(与 API Key 同一组)
+- 单次请求 body 上限 10MB(可通过 `OTLP_MAX_BODY_SIZE` 调整)
+- 异步写入 ClickHouse,返回 `ExportTracePartialSuccess` 反馈
 
 ---
 

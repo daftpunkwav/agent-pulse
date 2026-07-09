@@ -300,10 +300,15 @@ Agent 五维平均分。
 OpenTelemetry OTLP/HTTP 接收端点。
 
 - Content-Type: `application/x-protobuf`
-- 协议：[OTLP Trace Export](https://opentelemetry.io/docs/specs/otlp/#trace-export)
-- 兼容：所有 OpenTelemetry 官方 SDK
+- 协议: [OTLP Trace Export](https://opentelemetry.io/docs/specs/otlp/#trace-export)
+- 兼容: 所有 OpenTelemetry 官方 SDK
+- 鉴权: `X-AgentPulse-Key` 头(必须,与 API Key 同一组)
+- Body 限制: 默认 10MB,可通过 `OTLP_MAX_BODY_SIZE` 调整
+- 超时: ReadHeader 5s / Read 30s / Write 30s
 
-支持 OTel GenAI 语义约定属性 + AgentPulse 自定义属性（`ap.*`）。
+支持 OTel GenAI 语义约定属性 + AgentPulse 自定义属性(`ap.*`)。
+
+> **gRPC 接收 (端口 4317)**: 当前版本未实现,配置项保留为 Phase 2 扩展。
 
 ## 8. 健康检查
 
@@ -337,9 +342,12 @@ OpenTelemetry OTLP/HTTP 接收端点。
 
 错误码：
 - `400 bad_request` — 参数错误
-- `401 unauthorized` — 鉴权失败（Phase 2 启用）
+- `401 unauthorized` — 鉴权失败(MVP 已启用,`X-AgentPulse-Key` 缺失或无效)
 - `404 not_found` — 资源不存在
-- `500 internal_error` — 服务内部错误
+- `405 method_not_allowed` — 方法不允许
+- `413 payload_too_large` — Body 超过限制
+- `500 internal_error` — 服务内部错误(详细错误仅写日志,客户端只见通用消息 + request_id)
+- `503 service_unavailable` — 依赖不可用(如 ClickHouse/Postgres 离线)
 
 ## 10. 限流（Phase 2）
 

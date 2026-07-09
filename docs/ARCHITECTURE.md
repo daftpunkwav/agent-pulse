@@ -278,13 +278,16 @@ reflection:
 
 ## 8. 安全考虑
 
+> **当前阶段 (v0.1.x) 安全基线**: 已实现 X-AgentPulse-Key 头校验(基于配置文件白名单 + SHA-256 比对),OTLP 接收端加 body size 限制与 Key 校验,DSN 密码不在日志中明文输出,默认密码启动校验。
+
 | 场景 | 当前实现 | 未来改进 |
 |------|---------|---------|
-| API 鉴权 | `X-AgentPulse-Key` 头（占位） | JWT / OAuth2 |
-| OTLP 接入 | 无鉴权（开发环境） | mTLS / Bearer Token |
-| 数据库密码 | `.env` 文件 | Kubernetes Secrets |
-| PII 数据 | input/output preview 截断 | 自动检测 + 脱敏 |
-| 速率限制 | 无 | Token Bucket + 维度限流 |
+| API 鉴权 | `X-AgentPulse-Key` 头(配置文件白名单,SHA-256) | DB/API Key CRUD + JWT/OAuth2 |
+| OTLP 接入 | `X-AgentPulse-Key` + `MaxBytesReader`(默认 10MB) + Read/Write Timeout | mTLS / IP 白名单 / 速率限制 |
+| 数据库密码 | `MaskedDSN()` 输出脱敏 + Mode=release 强制非默认密码 | Kubernetes Secrets 集成 |
+| PII 数据 | input/output preview 截断 + evaluate 路径 regex 脱敏 | LLM 自动检测 + 完整脱敏流水线 |
+| 速率限制 | 无 | Token Bucket + 维度限流 (per-key/per-ip) |
+| 错误响应 | 内部 err 写日志,客户端只回通用消息 + request_id | 结构化错误码体系 |
 
 ## 9. 部署架构
 
@@ -347,18 +350,23 @@ npm run dev  (本地 :3000)
 
 | Phase | 内容 | 状态 |
 |-------|------|------|
-| Phase 1 | MVP：Trace + Cost + Eval + 基础 Cluster + Harness/ABTest API | ✅ |
+| Phase 1 | MVP:Trace + Cost + Eval + 基础 Cluster + Harness/ABTest API | ✅ |
 | Phase 2 | EvalLoop 迭代工作流 + LLM 标注聚类 + 漂移检测 + 告警 | 待开始 |
 | Phase 3 | Go SDK + Trace 火焰图前端 + EvalLoop UI | 待开始 |
 | Phase 4 | Kubernetes 部署 + Prometheus 监控 + OpenTelemetry 互操作 | 待开始 |
 | Phase 5 | 多租户 + SaaS 化 + 计费 | 待开始 |
 
+> **Phase 1 已实现接口**: Trace (按 trace_id/session/user/agent 查询), Cost (breakdown/timeline/total), Eval (按 agent/scores/手动触发), Cluster (列表/详情/手动聚类), Harness (CRUD/promote/diff), ABTest (CRUD)。
+> **OTLP 接收**: 当前仅 HTTP/protobuf (端口 4318),**未实现 gRPC 接收器** (`otlp.grpc_port` 配置项保留为未来 Phase)。
+
 ## 12. 参考论文
 
-| 论文 | 引用位置 |
+> 以下 arxiv 编号为占位引用,实际链接可能在未来可访问。AgentPulse 实现以方法论为参考,不保证与具体论文完全一致。
+
+| 参考方法论 | 引用位置 |
 |------|---------|
-| [EvalLoop (arXiv:2607.05638)](https://arxiv.org/abs/2607.05638) | EvalLoop 迭代工作流 |
-| [HarnessX (arXiv:2606.14249)](https://arxiv.org/abs/2606.14249) | Harness Engineering 概念 |
-| [Self-Harness (arXiv:2606.09498)](https://arxiv.org/abs/2606.09498) | 自进化 Harness |
-| [OTel GenAI SemConv](https://opentelemetry.io/docs/specs/semconv/gen-ai/) | 语义约定映射 |
-| [CXI (arXiv:2607.06000)](https://arxiv.org/abs/2607.06000) | Trace 完整性（Phase 2） |
+| EvalLoop 迭代工作流 | EvalLoop 模块 (Phase 2) |
+| Harness Engineering | Harness 版本化与灰度 |
+| 自进化 Harness | Harness (Phase 3 扩展) |
+| [OTel GenAI SemConv](https://opentelemetry.io/docs/specs/semconv/gen-ai/) | 语义约定映射(已实现) |
+| Trace 完整性审计 | Phase 2 计划 |

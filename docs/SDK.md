@@ -79,7 +79,9 @@ hook = AgentPulseAutoGenHook(agent_name="my-autogen")
 hook.wrap_agent(my_agent)
 ```
 
-## 3. Go SDK（Phase 3 实现）
+## 3. Go SDK（Phase 3 计划中, 当前未实现）
+
+> **状态**: `sdk-go/` 目录当前仅占位 (`sdk-go/.gitkeep`),Go SDK 将在 Phase 3 实现。以下 API 为设计草案,可能与最终实现有差异。
 
 ### 3.1 计划 API
 
@@ -99,6 +101,8 @@ func main() {
     result, _ := agent.Run(ctx, "...")
 }
 ```
+
+**当前推荐方案**: 在 Go 项目中使用 OpenTelemetry 官方 Go SDK + OTLP HTTP Exporter 直接上报到 AgentPulse `:4318/v1/traces`,与 Python SDK 共享同一 OTLP 协议。详见 §4 通用 OTLP 接入。
 
 ## 4. 通用 OTLP 接入
 
