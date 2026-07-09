@@ -1,10 +1,11 @@
-// Package app 负责 AgentPulse 应用的依赖装配与生命周期管理。
+// Package app assembles AgentPulse dependencies and manages lifecycle.
 //
-// 设计原则：
-//   - 单一入口：main.go 仅调用 LoadConfig + New + Serve + Shutdown
-//   - 显式依赖：所有依赖通过参数注入，不使用全局变量
-//   - 接口解耦：业务层只依赖 Repository/Service 接口
-//   - 优雅关闭：按依赖顺序反向关闭资源
+// Design:
+//   - Single entry: main.go calls LoadConfig + New + Serve + Shutdown
+//   - Explicit injection: all dependencies passed as args, no globals
+//   - Interface decoupling: business layer depends on Repository/Service
+//     interfaces only
+//   - Graceful shutdown: reverse order of dependency creation
 package app
 
 import (
@@ -26,7 +27,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Application 是 AgentPulse 的应用容器。
+// Application is the AgentPulse app container.
 type Application struct {
 	cfg *config.Config
 	log logger.Logger
@@ -45,15 +46,18 @@ type Application struct {
 	closed      bool
 }
 
-// ShutdownFunc 是优雅关闭钩子。
+// ShutdownFunc is a graceful-shutdown hook.
 type ShutdownFunc func(context.Context) error
 
-// LoadConfig 是 config.Load 的薄包装。
+// LoadConfig is a thin wrapper around config.Load.
 func LoadConfig(dir string) (*config.Config, error) {
 	return config.Load(dir)
 }
 
-// New 创建并初始化应用。
+// New creates and initializes the application.
+//
+// If any step fails, all previously-initialized resources are torn down
+// before returning the error (fail-fast with rollback).
 func New(cfg *config.Config, log logger.Logger) (*Application, error) {
 	app := &Application{
 		cfg: cfg,
@@ -61,13 +65,18 @@ func New(cfg *config.Config, log logger.Logger) (*Application, error) {
 	}
 
 	if err := app.initInfrastructure(); err != nil {
+		// Rollback any partial initialization
+		_ = app.Shutdown(context.Background())
 		return nil, fmt.Errorf("init infrastructure: %w", err)
 	}
 
 	repos := app.initRepositories()
 	app.services = service.NewContainer(repos, log)
+	// Inject self as the health pinger for /readyz.
+	app.services.HealthPinger = app
 
 	if err := app.initHTTPServers(); err != nil {
+		_ = app.Shutdown(context.Background())
 		return nil, fmt.Errorf("init http servers: %w", err)
 	}
 
@@ -154,8 +163,9 @@ func (a *Application) initHTTPServers() error {
 	return nil
 }
 
-// Serve 启动所有 HTTP 服务。
-func (a *Application) Serve() error {
+// Serve starts all HTTP servers and blocks until either server errors or
+// ctx is cancelled.
+func (a *Application) Serve(ctx context.Context) error {
 	errCh := make(chan error, 2)
 
 	go func() {
@@ -175,12 +185,12 @@ func (a *Application) Serve() error {
 	select {
 	case err := <-errCh:
 		return err
-	case <-a.context().Done():
+	case <-ctx.Done():
 		return nil
 	}
 }
 
-// Shutdown 优雅关闭所有资源。
+// Shutdown gracefully releases all resources. Idempotent.
 func (a *Application) Shutdown(ctx context.Context) error {
 	a.mu.Lock()
 	if a.closed {
@@ -233,17 +243,13 @@ func (a *Application) shutdownHTTP(ctx context.Context) error {
 	return firstErr
 }
 
-func (a *Application) context() context.Context {
-	return context.Background()
-}
-
 func (a *Application) onShutdown(fn ShutdownFunc) {
 	a.mu.Lock()
 	a.shutdownFns = append(a.shutdownFns, fn)
 	a.mu.Unlock()
 }
 
-// ListenerAddr 返回主 API 服务实际监听地址。
+// ListenerAddr returns the API server's bind address.
 func (a *Application) ListenerAddr() string {
 	if a.apiServer == nil {
 		return ""
@@ -251,34 +257,34 @@ func (a *Application) ListenerAddr() string {
 	return a.apiServer.Addr
 }
 
-// NetListener 辅助测试注入自定义 listener。
+// NetListener is a helper for tests to inject a custom listener.
 func NetListener(addr string) (net.Listener, error) {
 	return net.Listen("tcp", addr)
 }
 
-// HealthCheck 用于健康检查端点。
+// HealthCheck performs readiness probes against all critical dependencies.
+// Returns the first failing dependency's name + error.
 func (a *Application) HealthCheck() error {
-	checks := []struct {
+	type check struct {
 		name string
 		fn   func() error
-	}{
+	}
+	checks := []check{
 		{"clickhouse", a.clickhouse.Ping},
 		{"postgres", a.postgres.Ping},
 	}
 	if a.chroma != nil {
-		checks = append(checks, struct {
-			name string
-			fn   func() error
-		}{"chroma", a.chroma.Ping})
+		checks = append(checks, check{"chroma", a.chroma.Ping})
 	}
 
 	for _, c := range checks {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		_ = ctx
-		defer cancel()
 		if err := c.fn(); err != nil {
+			cancel()
 			return fmt.Errorf("%s: %w", c.name, err)
 		}
+		cancel()
 	}
 	return nil
 }

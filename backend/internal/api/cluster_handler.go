@@ -1,4 +1,4 @@
-// Package api - Cluster Handler。
+﻿// Package api - Cluster Handler。
 package api
 
 import (
@@ -29,7 +29,7 @@ func (h *ClusterHandler) List(c *gin.Context) {
 
 	clusters, err := h.services.ClusterService.GetLatestClusters(c.Request.Context())
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *ClusterHandler) Get(c *gin.Context) {
 
 	cluster, err := h.services.ClusterService.GetCluster(c.Request.Context(), clusterID)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 	if cluster == nil {
@@ -76,7 +76,7 @@ func (h *ClusterHandler) RunAnalysis(c *gin.Context) {
 
 	clusters, err := h.services.ClusterService.RunAnalysis(c.Request.Context(), window)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 

@@ -1,4 +1,4 @@
-// Package service 提供 AgentPulse 的业务服务。
+﻿// Package service 提供 AgentPulse 的业务服务。
 //
 // 服务分层：
 //   - container.go:  ServiceContainer 聚合所有服务实例
@@ -33,7 +33,13 @@ type Container struct {
 	CostService     *CostService
 	EvalService     *EvalService
 	ClusterService  *ClusterService
-	Judge           domain.Judge // 可替换的 LLM Judge
+	Judge           domain.Judge
+
+	// HealthPinger is injected by Application for /readyz.
+	// Optional: nil means readiness returns 503.
+	HealthPinger interface {
+		HealthCheck() error
+	}
 }
 
 // NewContainer 创建服务容器。
@@ -69,3 +75,4 @@ func (c *Container) IngestSpans(ctx context.Context, spans []*domain.Span) error
 	}
 	return c.SpanService.IngestSpans(ctx, spans)
 }
+

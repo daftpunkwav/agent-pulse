@@ -1,4 +1,4 @@
-// Package api - Trace Handler。
+﻿// Package api - Trace Handler。
 package api
 
 import (
@@ -36,7 +36,7 @@ func (h *TraceHandler) GetTraceTree(c *gin.Context) {
 
 	tree, err := h.services.SpanService.GetTraceTree(c.Request.Context(), traceID)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 	if tree == nil {
@@ -56,7 +56,7 @@ func (h *TraceHandler) ListBySession(c *gin.Context) {
 
 	spans, err := h.services.SpanService.ListBySession(c.Request.Context(), sessionID, opts)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -73,7 +73,7 @@ func (h *TraceHandler) ListByUser(c *gin.Context) {
 
 	spans, err := h.services.SpanRepo.ListByUser(c.Request.Context(), userID, opts)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *TraceHandler) ListByAgent(c *gin.Context) {
 
 	spans, err := h.services.SpanRepo.ListByAgent(c.Request.Context(), agentName, opts)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -113,10 +113,10 @@ func parseListOptions(c *gin.Context) domain.ListOptions {
 	}
 
 	if v := c.Query("limit"); v != "" {
-		opts.Limit = parseInt(v, 100)
+		opts.Limit = parseIntDefault(v, 100)
 	}
 	if v := c.Query("offset"); v != "" {
-		opts.Offset = parseInt(v, 0)
+		opts.Offset = parseIntDefault(v, 0)
 	}
 	if v := c.Query("status"); v != "" {
 		opts.Status = domain.SpanStatus(v)
@@ -140,3 +140,4 @@ func parseListOptions(c *gin.Context) domain.ListOptions {
 
 	return opts
 }
+

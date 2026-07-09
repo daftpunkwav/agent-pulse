@@ -1,4 +1,4 @@
-// Package api - Cost Handler。
+﻿// Package api - Cost Handler銆?
 package api
 
 import (
@@ -12,13 +12,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CostHandler 成本归因接口。
+// CostHandler 鎴愭湰褰掑洜鎺ュ彛銆?
 type CostHandler struct {
 	services *service.Container
 	logger   logger.Logger
 }
 
-// NewCostHandler 创建处理器。
+// NewCostHandler 鍒涘缓澶勭悊鍣ㄣ€?
 func NewCostHandler(services *service.Container, log logger.Logger) *CostHandler {
 	return &CostHandler{
 		services: services,
@@ -26,7 +26,7 @@ func NewCostHandler(services *service.Container, log logger.Logger) *CostHandler
 	}
 }
 
-// Breakdown 五维成本归因。
+// Breakdown 浜旂淮鎴愭湰褰掑洜銆?
 //
 // GET /api/v1/cost/breakdown?from=&to=&dimensions=user,agent,tool&limit=10
 func (h *CostHandler) Breakdown(c *gin.Context) {
@@ -39,11 +39,11 @@ func (h *CostHandler) Breakdown(c *gin.Context) {
 	dimsParam := c.DefaultQuery("dimensions", "user,agent,tool,model")
 	dims := parseDimensions(dimsParam)
 
-	limit := parseInt(c.Query("limit"), 100)
+	limit := parseIntDefault(c.Query("limit"), 100)
 
 	breakdowns, err := h.services.CostService.Breakdown(c.Request.Context(), window, dims, limit)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -53,7 +53,7 @@ func (h *CostHandler) Breakdown(c *gin.Context) {
 	})
 }
 
-// Timeline 成本时间序列。
+// Timeline 鎴愭湰鏃堕棿搴忓垪銆?
 //
 // GET /api/v1/cost/timeline?from=&to=&granularity=hour|day
 func (h *CostHandler) Timeline(c *gin.Context) {
@@ -67,7 +67,7 @@ func (h *CostHandler) Timeline(c *gin.Context) {
 
 	points, err := h.services.CostService.Timeline(c.Request.Context(), window, granularity)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -78,7 +78,7 @@ func (h *CostHandler) Timeline(c *gin.Context) {
 	})
 }
 
-// Total 时间窗口内总成本。
+// Total 鏃堕棿绐楀彛鍐呮€绘垚鏈€?
 //
 // GET /api/v1/cost/total?from=&to=
 func (h *CostHandler) Total(c *gin.Context) {
@@ -90,7 +90,7 @@ func (h *CostHandler) Total(c *gin.Context) {
 
 	totalCost, totalTokens, err := h.services.CostService.TotalCost(c.Request.Context(), window)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -102,16 +102,16 @@ func (h *CostHandler) Total(c *gin.Context) {
 }
 
 // ---------------------------------------------------------------------------
-// 辅助
+// 杈呭姪
 // ---------------------------------------------------------------------------
 
-// parseWindow 解析时间窗口。
+// parseWindow 瑙ｆ瀽鏃堕棿绐楀彛銆?
 func parseWindow(c *gin.Context) (domain.TimeWindow, bool) {
 	fromStr := c.Query("from")
 	toStr := c.Query("to")
 
 	if fromStr == "" || toStr == "" {
-		// 默认最近 24h
+		// 榛樿鏈€杩?24h
 		to := time.Now()
 		from := to.Add(-24 * time.Hour)
 		return domain.TimeWindow{From: from, To: to}, true
@@ -126,7 +126,7 @@ func parseWindow(c *gin.Context) (domain.TimeWindow, bool) {
 	return domain.TimeWindow{From: from, To: to}, true
 }
 
-// parseDimensions 解析维度列表。
+// parseDimensions 瑙ｆ瀽缁村害鍒楄〃銆?
 func parseDimensions(s string) []domain.CostDimension {
 	if s == "" {
 		return nil
@@ -142,3 +142,4 @@ func parseDimensions(s string) []domain.CostDimension {
 	}
 	return result
 }
+

@@ -1,13 +1,13 @@
-// Package api 提供 HTTP API 层。
+// Package api - HTTP router.
 //
-// 路由分组：
-//   /api/v1/trace/*     - Trace 查询
-//   /api/v1/cost/*      - 成本归因
-//   /api/v1/eval/*      - 评估结果
-//   /api/v1/cluster/*   - 失败聚类
-//   /api/v1/harness/*   - Harness 管理
-//   /api/v1/abtest/*    - A/B 测试
-//   /healthz, /readyz   - 健康检查
+// Route groups:
+//   /api/v1/traces/*    - Trace queries
+//   /api/v1/cost/*      - Cost attribution
+//   /api/v1/eval/*      - Evaluations
+//   /api/v1/clusters/*  - Failure clustering
+//   /api/v1/harness/*   - Harness management
+//   /api/v1/abtests/*   - A/B tests
+//   /healthz, /readyz   - Health checks
 package api
 
 import (
@@ -17,24 +17,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// NewRouter 创建并配置 HTTP 路由。
+// NewRouter creates and configures the HTTP router.
 func NewRouter(cfg *config.Config, services *service.Container, log logger.Logger) *gin.Engine {
-	gin.SetMode(cfg.Server.Mode)
+	// gin.SetMode already called in app.initHTTPServers; do not call again.
 
 	r := gin.New()
 
-	// 全局中间件
+	// Global middleware
 	r.Use(RecoveryMiddleware(log))
 	r.Use(LoggingMiddleware(log))
-	r.Use(CORSMiddleware())
+	r.Use(CORSMiddleware(cfg))
 	r.Use(RequestIDMiddleware())
 
-	// 健康检查（无需鉴权）
+	// Health checks (no auth required)
 	r.GET("/healthz", HealthHandler(services, log))
 	r.GET("/readyz", HealthHandler(services, log))
 
 	// API v1
 	v1 := r.Group("/api/v1")
+	v1.Use(AuthMiddleware(cfg, log))
 	{
 		// Trace
 		traceHandler := NewTraceHandler(services, log)

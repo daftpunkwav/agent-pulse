@@ -1,4 +1,4 @@
-// Package api - Harness & AB Test Handler。
+﻿// Package api - Harness & AB Test Handler。
 package api
 
 import (
@@ -34,7 +34,7 @@ func (h *HarnessHandler) ListVersions(c *gin.Context) {
 
 	versions, err := h.services.MetadataRepo.ListHarnessVersions(c.Request.Context(), agentName)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -48,7 +48,7 @@ func (h *HarnessHandler) ListVersions(c *gin.Context) {
 // GetVersion 查询指定版本。
 func (h *HarnessHandler) GetVersion(c *gin.Context) {
 	agentName := c.Param("agent_name")
-	version := parseInt(c.Param("version"), 0)
+	version := parseIntDefault(c.Param("version"), 0)
 	if version <= 0 {
 		BadRequest(c, "invalid version")
 		return
@@ -56,7 +56,7 @@ func (h *HarnessHandler) GetVersion(c *gin.Context) {
 
 	hc, err := h.services.MetadataRepo.GetHarnessVersion(c.Request.Context(), agentName, version)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 	if hc == nil {
@@ -95,7 +95,7 @@ func (h *HarnessHandler) CreateVersion(c *gin.Context) {
 	}
 
 	if err := h.services.MetadataRepo.CreateHarnessVersion(c.Request.Context(), hc); err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -105,14 +105,14 @@ func (h *HarnessHandler) CreateVersion(c *gin.Context) {
 // PromoteVersion 提升版本到 production。
 func (h *HarnessHandler) PromoteVersion(c *gin.Context) {
 	agentName := c.Param("agent_name")
-	version := parseInt(c.Param("version"), 0)
+	version := parseIntDefault(c.Param("version"), 0)
 	if version <= 0 {
 		BadRequest(c, "invalid version")
 		return
 	}
 
 	if err := h.services.MetadataRepo.UpdateHarnessStatus(c.Request.Context(), agentName, version, domain.HarnessProduction); err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -126,8 +126,8 @@ func (h *HarnessHandler) PromoteVersion(c *gin.Context) {
 // DiffVersions 对比两个版本。
 func (h *HarnessHandler) DiffVersions(c *gin.Context) {
 	agentName := c.Param("agent_name")
-	v1 := parseInt(c.Param("v1"), 0)
-	v2 := parseInt(c.Param("v2"), 0)
+	v1 := parseIntDefault(c.Param("v1"), 0)
+	v2 := parseIntDefault(c.Param("v2"), 0)
 	if v1 <= 0 || v2 <= 0 {
 		BadRequest(c, "invalid version numbers")
 		return
@@ -135,12 +135,12 @@ func (h *HarnessHandler) DiffVersions(c *gin.Context) {
 
 	hc1, err := h.services.MetadataRepo.GetHarnessVersion(c.Request.Context(), agentName, v1)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 	hc2, err := h.services.MetadataRepo.GetHarnessVersion(c.Request.Context(), agentName, v2)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -180,7 +180,7 @@ func (h *ABTestHandler) List(c *gin.Context) {
 
 	tests, err := h.services.MetadataRepo.ListABTests(c.Request.Context(), opts)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -196,7 +196,7 @@ func (h *ABTestHandler) Get(c *gin.Context) {
 
 	test, err := h.services.MetadataRepo.GetABTest(c.Request.Context(), id)
 	if err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 	if test == nil {
@@ -235,7 +235,7 @@ func (h *ABTestHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.services.MetadataRepo.CreateABTest(c.Request.Context(), test); err != nil {
-		InternalError(c, err)
+		InternalErrorLog(c, h.logger, err)
 		return
 	}
 
@@ -244,3 +244,4 @@ func (h *ABTestHandler) Create(c *gin.Context) {
 
 // _ 防止 unused import 警告（strconv 用于 parseInt）
 var _ = strconv.Itoa
+
