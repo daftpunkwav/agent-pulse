@@ -7,17 +7,13 @@ import {
   clustersResponseSchema,
   costTotalSchema,
 } from "@/lib/schemas";
-import { timeWindowParams } from "@/lib/validation";
+import { useTimeWindow } from "@/lib/hooks/useTimeWindow";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
 
 export function OverviewView() {
-  const now = new Date();
-  const window = timeWindowParams(
-    new Date(now.getTime() - 24 * 3600 * 1000),
-    now
-  );
+  const window = useTimeWindow({ hours: 24 });
 
   const {
     data: cost,
@@ -46,8 +42,9 @@ export function OverviewView() {
         <p className="text-sm text-gray mt-1">最近 24 小时 Agent 运行总览</p>
       </div>
 
-      {isLoading && <LoadingState />}
-      {error && (
+      {isLoading ? (
+        <LoadingState />
+      ) : error ? (
         <ErrorState
           message={error instanceof Error ? error.message : "加载失败"}
           onRetry={() => {
@@ -55,9 +52,7 @@ export function OverviewView() {
             void mutateClusters();
           }}
         />
-      )}
-
-      {!isLoading && !error && (
+      ) : (
         <>
           <div className="grid grid-cols-4 mb-6">
             <MetricCard

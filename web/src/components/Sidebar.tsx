@@ -18,7 +18,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-60 border-r border-gray-200 bg-white">
+    <aside className="relative w-60 border-r border-gray-200 bg-white">
       <div className="flex h-16 items-center border-b border-gray-200 px-6">
         <h1 className="text-xl font-bold text-gray-900">
           Agent<span className="text-blue-600">Pulse</span>

@@ -25,7 +25,11 @@ export async function swrFetcher(url: string): Promise<unknown> {
 export function createSchemaFetcher<T>(schema: z.ZodType<T>) {
   return async (url: string): Promise<T> => {
     const data = await swrFetcher(url);
-    return schema.parse(data);
+    const parsed = schema.safeParse(data);
+    if (!parsed.success) {
+      throw new Error(`响应格式不匹配: ${parsed.error.message}`);
+    }
+    return parsed.data;
   };
 }
 

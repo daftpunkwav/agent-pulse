@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
 import {
   LineChart,
@@ -24,9 +24,13 @@ import { EmptyState } from "@/components/EmptyState";
 export function CostView() {
   const [days, setDays] = useState(7);
 
-  const fromIso = new Date(Date.now() - days * 24 * 3600 * 1000);
-  const toIso = new Date();
-  const windowParams = timeWindowParams(fromIso, toIso);
+  const windowParams = useMemo(() => {
+    const to = new Date();
+    to.setMilliseconds(0);
+    const from = new Date(to.getTime() - days * 24 * 3600 * 1000);
+    from.setMilliseconds(0);
+    return timeWindowParams(from, to);
+  }, [days]);
 
   const {
     data: breakdown,

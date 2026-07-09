@@ -15,8 +15,8 @@ import { evalScoresResponseSchema } from "@/lib/schemas";
 import {
   agentPathSegment,
   sanitizeAgentName,
-  timeWindowParams,
 } from "@/lib/validation";
+import { useTimeWindow } from "@/lib/hooks/useTimeWindow";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
@@ -26,10 +26,7 @@ export function EvalView() {
   const [activeAgent, setActiveAgent] = useState("interview-agent");
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const windowParams = timeWindowParams(
-    new Date(Date.now() - 7 * 24 * 3600 * 1000),
-    new Date()
-  );
+  const windowParams = useTimeWindow({ days: 7 });
 
   const safeAgent = sanitizeAgentName(activeAgent);
   const { data, error, isLoading, mutate } = useSWR(
