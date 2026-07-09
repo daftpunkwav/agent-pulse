@@ -46,7 +46,7 @@ func NewContainer(repos *repository.Container, log logger.Logger) *Container {
 		VectorRepo:   repos.Vector,
 	}
 
-	c.SpanService = NewSpanService(repos.Span, log)
+	c.SpanService = NewSpanService(repos.Span, repos.Pricing, log)
 	c.CostService = NewCostService(repos.Span, repos.Pricing, log)
 	c.EvalService = NewEvalService(repos.Evaluation, repos.Span, log)
 	c.ClusterService = NewClusterService(repos.Span, repos.Metadata, repos.Vector, log)

@@ -141,10 +141,14 @@ func (a *Application) initHTTPServers() error {
 		WriteTimeout: a.cfg.Server.WriteTimeout,
 	}
 
-	otlpHandler := collector.NewHTTPHandler(a.services, a.log)
+	otlpHandler := collector.NewHTTPHandler(a.cfg, a.services, a.log)
 	a.otlpServer = &http.Server{
-		Addr:    fmt.Sprintf(":%d", a.cfg.OTLP.HTTPPort),
-		Handler: otlpHandler,
+		Addr:              fmt.Sprintf(":%d", a.cfg.OTLP.HTTPPort),
+		Handler:           otlpHandler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	return nil

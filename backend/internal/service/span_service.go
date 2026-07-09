@@ -40,7 +40,9 @@ type SpanServiceConfig struct {
 }
 
 // NewSpanService 创建服务实例。
-func NewSpanService(repo domain.SpanRepository, log logger.Logger) *SpanService {
+//
+// pricingRepo 可为 nil(测试场景);为 nil 时 fillMissingCost 跳过成本计算。
+func NewSpanService(repo domain.SpanRepository, pricingRepo domain.PricingRepository, log logger.Logger) *SpanService {
 	cfg := SpanServiceConfig{
 		BatchSize:     100,
 		WorkerCount:   2,
@@ -50,6 +52,7 @@ func NewSpanService(repo domain.SpanRepository, log logger.Logger) *SpanService 
 
 	s := &SpanService{
 		repo:        repo,
+		pricingRepo: pricingRepo,
 		logger:      log.WithFields(map[string]any{"component": "span_service"}),
 		batchQueue:  make(chan *domain.Span, cfg.QueueSize),
 		workerCount: cfg.WorkerCount,

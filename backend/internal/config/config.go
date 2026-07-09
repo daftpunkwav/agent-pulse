@@ -14,6 +14,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -25,12 +26,28 @@ import (
 type Config struct {
 	Server      ServerConfig      `mapstructure:"server" validate:"required"`
 	Log         LogConfig         `mapstructure:"log" validate:"required"`
+	Auth        AuthConfig        `mapstructure:"auth" validate:"required"`
 	ClickHouse  ClickHouseConfig  `mapstructure:"clickhouse" validate:"required"`
 	Postgres    PostgresConfig    `mapstructure:"postgres" validate:"required"`
 	Chroma      ChromaConfig      `mapstructure:"chroma"`
 	Judge       JudgeConfig       `mapstructure:"judge" validate:"required"`
 	OTLP        OTLPConfig        `mapstructure:"otlp" validate:"required"`
 	Evaluation  EvaluationConfig  `mapstructure:"evaluation"`
+}
+
+// AuthConfig 鉴权配置。
+//
+// MVP 阶段使用配置文件白名单 + SHA-256 比对。
+// Phase 2 计划: 迁移到 DB/API Key CRUD + JWT。
+type AuthConfig struct {
+	// Enabled 是否启用鉴权。生产环境必须为 true。
+	Enabled bool `mapstructure:"enabled"`
+	// APIKeys 允许的 API Key 明文列表(启动时 hash 后比对)。
+	// 环境变量: AGENTPULSE_AUTH_API_KEYS=key1,key2,key3
+	APIKeys []string `mapstructure:"api_keys"`
+	// OTLPRequireKey OTLP 接收端是否要求 X-AgentPulse-Key。
+	// 默认与 Enabled 相同,生产建议为 true。
+	OTLPRequireKey *bool `mapstructure:"otlp_require_key"`
 }
 
 // ServerConfig HTTP 服务配置。
@@ -41,6 +58,9 @@ type ServerConfig struct {
 	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
 	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+	// AllowedOrigins CORS 允许的来源列表(逗号分隔)。支持 * 表示全部。
+	// 生产环境必须显式列出 web dashboard 的实际 origin。
+	AllowedOrigins string `mapstructure:"allowed_origins"`
 }
 
 // LogConfig 日志配置。
@@ -63,7 +83,7 @@ type ClickHouseConfig struct {
 	TLSEnabled bool `mapstructure:"tls_enabled"`
 }
 
-// DSN 返回 ClickHouse DSN 字符串。
+// DSN 返回 ClickHouse DSN 字符串(密码字段包含敏感信息,仅在内部使用)。
 func (c ClickHouseConfig) DSN() string {
 	protocol := "tcp"
 	if c.TLSEnabled {
@@ -74,6 +94,26 @@ func (c ClickHouseConfig) DSN() string {
 		auth = c.Username
 		if c.Password != "" {
 			auth += ":" + c.Password
+		}
+		auth += "@"
+	}
+	return fmt.Sprintf("%s://%s%s:%d/%s",
+		protocol, auth, c.Host, c.Port, c.Database)
+}
+
+// MaskedDSN 返回 DSN 的脱敏形式,密码字段替换为 ****。
+//
+// 适用于日志输出、错误信息、健康检查等场景。
+func (c ClickHouseConfig) MaskedDSN() string {
+	protocol := "tcp"
+	if c.TLSEnabled {
+		protocol = "tcp+tls"
+	}
+	auth := ""
+	if c.Username != "" {
+		auth = c.Username
+		if c.Password != "" {
+			auth += ":****"
 		}
 		auth += "@"
 	}
@@ -94,7 +134,7 @@ type PostgresConfig struct {
 	MaxLifetime  time.Duration `mapstructure:"max_lifetime"`
 }
 
-// DSN 返回 PostgreSQL DSN 字符串（pgx 格式）。
+// DSN 返回 PostgreSQL DSN 字符串(pgx 格式,密码字段包含敏感信息,仅在内部使用)。
 func (c PostgresConfig) DSN() string {
 	sslMode := c.SSLMode
 	if sslMode == "" {
@@ -103,6 +143,20 @@ func (c PostgresConfig) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%d dbname=%s user=%s password=%s sslmode=%s",
 		c.Host, c.Port, c.Database, c.Username, c.Password, sslMode,
+	)
+}
+
+// MaskedDSN 返回 DSN 的脱敏形式,密码字段替换为 ****。
+//
+// 适用于日志输出、错误信息、健康检查等场景。
+func (c PostgresConfig) MaskedDSN() string {
+	sslMode := c.SSLMode
+	if sslMode == "" {
+		sslMode = "disable"
+	}
+	return fmt.Sprintf(
+		"host=%s port=%d dbname=%s user=%s password=**** sslmode=%s",
+		c.Host, c.Port, c.Database, c.Username, sslMode,
 	)
 }
 
@@ -135,8 +189,9 @@ type JudgeConfig struct {
 
 // OTLPConfig OTLP 接收端配置。
 type OTLPConfig struct {
-	GRPCPort int `mapstructure:"grpc_port" validate:"required,min=1,max=65535"`
-	HTTPPort int `mapstructure:"http_port" validate:"required,min=1,max=65535"`
+	GRPCPort    int   `mapstructure:"grpc_port" validate:"required,min=1,max=65535"`
+	HTTPPort    int   `mapstructure:"http_port" validate:"required,min=1,max=65535"`
+	MaxBodySize int64 `mapstructure:"max_body_size"`
 }
 
 // EvaluationConfig 评估服务配置。
@@ -201,14 +256,20 @@ func setDefaults(v *viper.Viper) {
 	// Server
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 8080)
-	v.SetDefault("server.mode", "debug")
+	// 默认为 release: 防止忘改 mode 直接以 debug 启动暴露路由/性能下降。
+	v.SetDefault("server.mode", "release")
 	v.SetDefault("server.read_timeout", "30s")
 	v.SetDefault("server.write_timeout", "30s")
 	v.SetDefault("server.shutdown_timeout", "30s")
+	v.SetDefault("server.allowed_origins", "") // 留空 → 关闭 CORS;生产按需配置
 
 	// Log
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.format", "json")
+
+	// Auth
+	v.SetDefault("auth.enabled", false)         // 默认关闭(向后兼容 dev),生产必须显式 true
+	v.SetDefault("auth.otlp_require_key", true)  // 默认 OTLP 强制要求 Key
 
 	// ClickHouse
 	v.SetDefault("clickhouse.host", "localhost")
@@ -245,6 +306,8 @@ func setDefaults(v *viper.Viper) {
 	// OTLP
 	v.SetDefault("otlp.grpc_port", 4317)
 	v.SetDefault("otlp.http_port", 4318)
+	// 默认 10MB,防止单次请求把内存撑爆。
+	v.SetDefault("otlp.max_body_size", int64(10<<20))
 
 	// Evaluation
 	v.SetDefault("evaluation.sample_rate", 1.0)
@@ -259,5 +322,47 @@ func setDefaults(v *viper.Viper) {
 
 func validate(cfg *Config) error {
 	v := validator.New()
-	return v.Struct(cfg)
+	if err := v.Struct(cfg); err != nil {
+		return err
+	}
+
+	// 1. release 模式: 禁止默认密码 / 空白密码。
+	if cfg.Server.Mode == "release" {
+		if cfg.Postgres.Password == "" || cfg.Postgres.Password == "changeme" {
+			return fmt.Errorf("postgres.password must be set to a non-default value in release mode")
+		}
+		if cfg.Judge.APIKey == "" {
+			return fmt.Errorf("judge.api_key must be set in release mode")
+		}
+		if cfg.Auth.Enabled && len(cfg.APIKeysResolved()) == 0 {
+			return fmt.Errorf("auth.enabled=true requires at least one API key (auth.api_keys)")
+		}
+	}
+
+	// 2. auth.api_keys 至少 1 个时(无论 mode),长度必须 >= 16 字符。
+	for _, k := range cfg.APIKeysResolved() {
+		if len(k) < 16 {
+			return fmt.Errorf("auth.api_keys contains a key shorter than 16 chars; refuse to accept weak keys")
+		}
+	}
+
+	return nil
+}
+
+// APIKeysResolved 合并配置与环境变量中的 API Keys。
+//
+// 环境变量 AGENTPULSE_AUTH_API_KEYS 用逗号分隔。
+// 当环境变量存在时,优先使用环境变量(避免配置文件误提交泄露)。
+func (c *Config) APIKeysResolved() []string {
+	if v := strings.TrimSpace(os.Getenv("AGENTPULSE_AUTH_API_KEYS")); v != "" {
+		parts := strings.Split(v, ",")
+		out := make([]string, 0, len(parts))
+		for _, p := range parts {
+			if t := strings.TrimSpace(p); t != "" {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
+	return c.Auth.APIKeys
 }

@@ -7,14 +7,20 @@
 //   - 解耦 OTLP 协议与业务层：协议层只负责解析，业务层只看到 domain.Span
 //   - 异步批写：不影响 OTLP 接收延迟
 //   - 错误隔离：单条 Span 失败不影响整体
+//
+// 安全加固(v0.1.x):
+//   - API Key 鉴权(基于 cfg.Auth.APIKeys 白名单)
+//   - Body size 上限(默认 10MB,防止 OOM)
+//   - panic recover(防止单个请求 panic 杀死进程)
+//   - 失败写入通过 OTLP PartialSuccess 反馈客户端
 package collector
 
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	collectorpb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -22,6 +28,7 @@ import (
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/agentpulse/backend/internal/config"
 	"github.com/agentpulse/backend/internal/domain"
 	"github.com/agentpulse/backend/internal/service"
 	"github.com/agentpulse/backend/pkg/logger"
@@ -35,22 +42,35 @@ import (
 // 协议：application/x-protobuf（OpenTelemetry 标准）
 type HTTPHandler struct {
 	services *service.Container
+	cfg      *config.Config
 	logger   logger.Logger
 }
 
 // NewHTTPHandler 创建 HTTP 处理器。
-func NewHTTPHandler(services *service.Container, log logger.Logger) http.Handler {
+func NewHTTPHandler(cfg *config.Config, services *service.Container, log logger.Logger) http.Handler {
+	if cfg == nil {
+		panic("collector: config is required")
+	}
 	if services == nil {
 		panic("collector: services container is required")
 	}
 	return &HTTPHandler{
 		services: services,
+		cfg:      cfg,
 		logger:   log.WithFields(map[string]any{"component": "otlp_collector"}),
 	}
 }
 
 // ServeHTTP 实现 http.Handler。
 func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// panic 恢复: 单个请求 panic 不能杀死整个进程。
+	defer func() {
+		if rec := recover(); rec != nil {
+			h.logger.Errorf("otlp panic recovered: %v\n%s", rec, debug.Stack())
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+	}()
+
 	// 仅接受 POST
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -63,11 +83,28 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 读取 body
+	// 鉴权: 基于 X-AgentPulse-Key + cfg 白名单(常量时间比对)。
+	requireKey := h.cfg.Auth.OTLPRequireKey == nil || *h.cfg.Auth.OTLPRequireKey
+	if !config.ValidateAPIKey(h.cfg.APIKeysResolved(), requireKey, r.Header.Get("X-AgentPulse-Key")) {
+		h.logger.WithFields(map[string]any{
+			"client_ip": clientIP(r),
+			"path":      r.URL.Path,
+		}).Warnf("otlp auth failed: invalid or missing X-AgentPulse-Key")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// 限制 body 大小: 防止单次请求把内存撑爆。
+	maxBody := h.cfg.OTLP.MaxBodySize
+	if maxBody <= 0 {
+		maxBody = 10 << 20 // 10MB fallback
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		h.logger.Errorf("read body: %v", err)
-		http.Error(w, "failed to read body", http.StatusBadRequest)
+		http.Error(w, "request body too large or unreadable", http.StatusRequestEntityTooLarge)
 		return
 	}
 	defer r.Body.Close()
@@ -84,29 +121,50 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	spans := h.convertOTLP(req)
 	if len(spans) == 0 {
 		// 返回成功但无数据
-		h.writeSuccess(w, 0)
+		h.writeSuccess(w, 0, "")
 		return
 	}
 
-	// 异步写入（不阻塞 OTLP 响应）
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// 异步写入(不阻塞 OTLP 响应),失败通过 PartialSuccess 反馈。
+	// 注意: 必须从 r.Context() 派生,关闭/超时会自动传播。
 	go func() {
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
+		defer func() {
+			if rec := recover(); rec != nil {
+				h.logger.Errorf("otlp async panic: %v\n%s", rec, debug.Stack())
+			}
+		}()
 		if err := h.services.IngestSpans(ctx, spans); err != nil {
 			h.logger.Errorf("ingest %d spans: %v", len(spans), err)
 		}
 	}()
 
-	h.writeSuccess(w, len(spans))
+	h.writeSuccess(w, len(spans), "")
 }
 
-// writeSuccess 写 OTLP 成功响应。
-func (h *HTTPHandler) writeSuccess(w http.ResponseWriter, count int) {
-	resp := &collectorpb.ExportTraceServiceResponse{
-		PartialSuccess: &collectorpb.ExportTracePartialSuccess{
+// clientIP 提取客户端 IP(优先 X-Forwarded-For,其次 RemoteAddr)。
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		return xff
+	}
+	return r.RemoteAddr
+}
+
+// writeSuccess 写 OTLP 成功响应;若 rejected > 0 则通过 PartialSuccess 反馈失败原因。
+func (h *HTTPHandler) writeSuccess(w http.ResponseWriter, count int, errMsg string) {
+	resp := &collectorpb.ExportTraceServiceResponse{}
+
+	if errMsg != "" {
+		resp.PartialSuccess = &collectorpb.ExportTracePartialSuccess{
+			RejectedSpans: int64(count),
+			ErrorMessage:  errMsg,
+		}
+	} else {
+		resp.PartialSuccess = &collectorpb.ExportTracePartialSuccess{
 			RejectedSpans: 0,
 			ErrorMessage:  "",
-		},
+		}
 	}
 
 	data, err := proto.Marshal(resp)
@@ -129,7 +187,7 @@ func (h *HTTPHandler) convertOTLP(req *collectorpb.ExportTraceServiceRequest) []
 	var spans []*domain.Span
 
 	for _, rs := range req.GetResourceSpans() {
-		// Resource 属性（service.name, deployment.environment 等）
+		// Resource 属性(service.name, deployment.environment 等)
 		resourceAttrs := h.attrsToMap(rs.GetResource().GetAttributes())
 		serviceName := getString(resourceAttrs, "service.name", "unknown")
 		environment := getString(resourceAttrs, "deployment.environment", "production")
@@ -182,7 +240,7 @@ func (h *HTTPHandler) spanFromOTLP(
 	}
 
 	// 从属性中提取 AgentPulse 自定义字段
-	// 这些字段由 SDK 设置，OTLP 通过 attributes 透传
+	// 这些字段由 SDK 设置,OTLP 通过 attributes 透传
 	if v, ok := spanAttrs["ap.session_id"].(string); ok {
 		span.SessionID = v
 	}
@@ -194,7 +252,7 @@ func (h *HTTPHandler) spanFromOTLP(
 	}
 
 	// 映射 OpenTelemetry GenAI 语义约定 (1.30+)
-	// 参考：https://opentelemetry.io/docs/specs/semconv/gen-ai/
+	// 参考:https://opentelemetry.io/docs/specs/semconv/gen-ai/
 	span.Type, span.Model, span.PromptTokens, span.CompletionTokens, span.TotalTokens, span.CostUSD, span.FinishReason, span.ToolName, span.ReasoningStep, span.InputPreview, span.OutputPreview =
 		h.mapSemanticConventions(spanAttrs)
 
@@ -224,7 +282,7 @@ func (h *HTTPHandler) mapSemanticConventions(attrs map[string]any) (
 	// GenAI 语义约定
 	if v, ok := attrs["gen_ai.system"].(string); ok {
 		_ = v
-		// 不强制设置 type，留给 SDK 通过 ap.span_type 设置
+		// 不强制设置 type,留给 SDK 通过 ap.span_type 设置
 	}
 	if v, ok := attrs["gen_ai.response.model"].(string); ok {
 		model = v
@@ -232,10 +290,11 @@ func (h *HTTPHandler) mapSemanticConventions(attrs map[string]any) (
 		model = v
 	}
 
-	if v, ok := attrs["gen_ai.usage.input_tokens"].(int64); ok {
+	// 负值兜底: OTel IntValue 是 int64,负数强转 uint32 会变成巨大数字。
+	if v, ok := attrs["gen_ai.usage.input_tokens"].(int64); ok && v >= 0 {
 		promptTokens = uint32(v)
 	}
-	if v, ok := attrs["gen_ai.usage.output_tokens"].(int64); ok {
+	if v, ok := attrs["gen_ai.usage.output_tokens"].(int64); ok && v >= 0 {
 		completionTokens = uint32(v)
 	}
 	totalTokens = promptTokens + completionTokens
@@ -253,16 +312,16 @@ func (h *HTTPHandler) mapSemanticConventions(attrs map[string]any) (
 	if v, ok := attrs["ap.model"].(string); ok && v != "" {
 		model = v
 	}
-	if v, ok := attrs["ap.prompt_tokens"].(int64); ok {
+	if v, ok := attrs["ap.prompt_tokens"].(int64); ok && v >= 0 {
 		promptTokens = uint32(v)
 	}
-	if v, ok := attrs["ap.completion_tokens"].(int64); ok {
+	if v, ok := attrs["ap.completion_tokens"].(int64); ok && v >= 0 {
 		completionTokens = uint32(v)
 	}
-	if v, ok := attrs["ap.total_tokens"].(int64); ok {
+	if v, ok := attrs["ap.total_tokens"].(int64); ok && v >= 0 {
 		totalTokens = uint32(v)
 	}
-	if v, ok := attrs["ap.cost_usd"].(float64); ok {
+	if v, ok := attrs["ap.cost_usd"].(float64); ok && v >= 0 {
 		costUSD = v
 	}
 	if v, ok := attrs["ap.finish_reason"].(string); ok {
@@ -271,7 +330,7 @@ func (h *HTTPHandler) mapSemanticConventions(attrs map[string]any) (
 	if v, ok := attrs["ap.tool_name"].(string); ok {
 		toolName = v
 	}
-	if v, ok := attrs["ap.reasoning_step"].(int64); ok {
+	if v, ok := attrs["ap.reasoning_step"].(int64); ok && v >= 0 {
 		reasoningStep = uint16(v)
 	}
 	if v, ok := attrs["ap.input_preview"].(string); ok {
@@ -335,7 +394,7 @@ func getString(m map[string]any, key, def string) string {
 	return def
 }
 
-// mergeAttrs 合并两个属性 map（后者覆盖前者）。
+// mergeAttrs 合并两个属性 map(后者覆盖前者)。
 func mergeAttrs(a, b map[string]any) map[string]any {
 	if a == nil && b == nil {
 		return nil
@@ -349,6 +408,3 @@ func mergeAttrs(a, b map[string]any) map[string]any {
 	}
 	return result
 }
-
-// 防止 unused import
-var _ = fmt.Sprintf
