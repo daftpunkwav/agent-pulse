@@ -16,5 +16,5 @@ export function useTimeWindow(options: { hours?: number; days?: number } = { hou
     const msBack = days != null ? days * 24 * 3600 * 1000 : hours * 3600 * 1000;
     const from = truncateToSeconds(new Date(to.getTime() - msBack));
     return timeWindowParams(from, to);
-  }, [hours, days]);
+  }, [days ?? hours]);
 }
