@@ -152,7 +152,7 @@ func clientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
-// writeSuccess 写 OTLP 成功响应;若 rejected > 0 则通过 PartialSuccess 反馈失败原因。
+// writeSuccess 写 OTLP 成功响应；errMsg 非空时通过 PartialSuccess 反馈失败原因。
 func (h *HTTPHandler) writeSuccess(w http.ResponseWriter, count int, errMsg string) {
 	resp := &collectorpb.ExportTraceServiceResponse{}
 
@@ -161,12 +161,8 @@ func (h *HTTPHandler) writeSuccess(w http.ResponseWriter, count int, errMsg stri
 			RejectedSpans: int64(count),
 			ErrorMessage:  errMsg,
 		}
-	} else {
-		resp.PartialSuccess = &collectorpb.ExportTracePartialSuccess{
-			RejectedSpans: 0,
-			ErrorMessage:  "",
-		}
 	}
+	// errMsg == "" 时不设置 PartialSuccess，避免无意义字段。
 
 	data, err := proto.Marshal(resp)
 	if err != nil {
