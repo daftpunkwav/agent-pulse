@@ -206,11 +206,15 @@ pip install -e .
 ### 4. 在你的 Agent 中集成
 
 ```python
-from agentpulse import init, wrap
+from agentpulse import init, observe
 
-init(api_key="ap-your-key", endpoint="http://localhost:8080")
+init(
+    api_key="ap-your-key-here",  # >=16 字符, ap- 前缀
+    endpoint="http://localhost:8080",
+    service_name="my-agent-app",
+)
 
-@wrap(session_id="user-123")
+@observe(agent_name="my-agent")  # 默认不捕获参数,防止 PII 泄露
 def my_agent(query: str) -> str:
     return llm.invoke(query)  # 自动上报 Trace
 ```
@@ -219,9 +223,11 @@ def my_agent(query: str) -> str:
 
 ```bash
 cd web
-npm install
+cp .env.example .env.local   # 开发环境可选
+npm install --legacy-peer-deps
 npm run dev
 # 访问 http://localhost:3000
+# 生产构建需设置 BACKEND_API_BASE（服务端变量）
 ```
 
 ---
