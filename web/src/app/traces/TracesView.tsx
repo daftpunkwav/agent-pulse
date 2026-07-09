@@ -18,7 +18,7 @@ export function TracesView() {
 
   const { data, error, isLoading, mutate } = useSWR(
     activeTraceId
-      ? `/api/backend/traces/${tracePathSegment(activeTraceId)}`
+      ? `/traces/${tracePathSegment(activeTraceId)}`
       : null,
     createSchemaFetcher(traceResponseSchema)
   );

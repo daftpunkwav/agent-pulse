@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/EmptyState";
 
 export function ClustersView() {
   const { data, error, isLoading, mutate } = useSWR(
-    `/api/backend/clusters?active_only=true`,
+    `/clusters?active_only=true`,
     createSchemaFetcher(clustersResponseSchema)
   );
 

@@ -40,7 +40,7 @@ export function CostView() {
     isLoading: breakdownLoading,
     mutate: mutateBreakdown,
   } = useSWR(
-    `/api/backend/cost/breakdown?${windowParams}&dimensions=user,agent,model`,
+    `/cost/breakdown?${windowParams}&dimensions=user,agent,model`,
     createSchemaFetcher(costBreakdownResponseSchema)
   );
 
@@ -50,7 +50,7 @@ export function CostView() {
     isLoading: timelineLoading,
     mutate: mutateTimeline,
   } = useSWR(
-    `/api/backend/cost/timeline?${windowParams}&granularity=day`,
+    `/cost/timeline?${windowParams}&granularity=day`,
     createSchemaFetcher(costTimelineResponseSchema)
   );
 

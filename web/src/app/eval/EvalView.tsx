@@ -34,7 +34,7 @@ export function EvalView() {
   const safeAgent = sanitizeAgentName(activeAgent);
   const { data, error, isLoading, mutate } = useSWR(
     safeAgent
-      ? `/api/backend/eval/agents/${agentPathSegment(safeAgent)}/scores?${windowParams}`
+      ? `/eval/agents/${agentPathSegment(safeAgent)}/scores?${windowParams}`
       : null,
     createSchemaFetcher(evalScoresResponseSchema)
   );

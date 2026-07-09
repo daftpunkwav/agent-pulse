@@ -23,7 +23,7 @@ export function HarnessView() {
   const safeAgent = sanitizeAgentName(activeAgent);
   const { data, error, isLoading, mutate } = useSWR(
     safeAgent
-      ? `/api/backend/harness/${agentPathSegment(safeAgent)}/versions`
+      ? `/harness/${agentPathSegment(safeAgent)}/versions`
       : null,
     createSchemaFetcher(harnessVersionsResponseSchema)
   );
@@ -51,7 +51,7 @@ export function HarnessView() {
     setPromotingVersion(version);
     try {
       await postJson(
-        `/api/backend/harness/${agentPathSegment(safeAgent)}/versions/${version}/promote`
+        `/harness/${agentPathSegment(safeAgent)}/versions/${version}/promote`
       );
       await mutate();
     } catch (err) {

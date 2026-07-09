@@ -22,7 +22,7 @@ export function OverviewView() {
     error: costError,
     isLoading: costLoading,
     mutate: mutateCost,
-  } = useSWR(`/api/backend/cost/total?${window}`, createSchemaFetcher(costTotalSchema));
+  } = useSWR(`/cost/total?${window}`, createSchemaFetcher(costTotalSchema));
 
   const {
     data: clusters,
@@ -30,7 +30,7 @@ export function OverviewView() {
     isLoading: clustersLoading,
     mutate: mutateClusters,
   } = useSWR(
-    `/api/backend/clusters?active_only=true`,
+    `/clusters?active_only=true`,
     createSchemaFetcher(clustersResponseSchema)
   );
 
