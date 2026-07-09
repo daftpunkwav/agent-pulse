@@ -47,8 +47,11 @@ export function EvalView() {
       setActiveAgent(safe);
     } else if (value.trim()) {
       setValidationError("Agent 名称仅允许小写字母、数字和连字符");
+      // 非空非法输入：清掉旧 query 防止向后端发送错误 agent
+      setActiveAgent("");
     } else {
       setValidationError(null);
+      setActiveAgent("");
     }
   };
 
