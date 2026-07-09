@@ -1,4 +1,4 @@
-﻿// Package api - Trace Handler。
+﻿// Package api - Trace Handler.
 package api
 
 import (
@@ -10,13 +10,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TraceHandler Trace 相关接口。
+// TraceHandler serves trace-related endpoints.
 type TraceHandler struct {
 	services *service.Container
 	logger   logger.Logger
 }
 
-// NewTraceHandler 创建处理器。
+// NewTraceHandler creates the handler.
 func NewTraceHandler(services *service.Container, log logger.Logger) *TraceHandler {
 	return &TraceHandler{
 		services: services,
@@ -24,7 +24,7 @@ func NewTraceHandler(services *service.Container, log logger.Logger) *TraceHandl
 	}
 }
 
-// GetTraceTree 查询完整调用树。
+// GetTraceTree returns the full call tree of a trace.
 //
 // GET /api/v1/traces/:trace_id
 func (h *TraceHandler) GetTraceTree(c *gin.Context) {
@@ -49,10 +49,13 @@ func (h *TraceHandler) GetTraceTree(c *gin.Context) {
 	})
 }
 
-// ListBySession 查询会话下所有 Span。
+// ListBySession returns all spans in a session.
 func (h *TraceHandler) ListBySession(c *gin.Context) {
 	sessionID := c.Param("session_id")
-	opts := parseListOptions(c)
+	opts, ok := parseListOptions(c)
+	if !ok {
+		return
+	}
 
 	spans, err := h.services.SpanService.ListBySession(c.Request.Context(), sessionID, opts)
 	if err != nil {
@@ -66,10 +69,13 @@ func (h *TraceHandler) ListBySession(c *gin.Context) {
 	})
 }
 
-// ListByUser 查询用户下所有 Span。
+// ListByUser returns all spans for a user.
 func (h *TraceHandler) ListByUser(c *gin.Context) {
 	userID := c.Param("user_id")
-	opts := parseListOptions(c)
+	opts, ok := parseListOptions(c)
+	if !ok {
+		return
+	}
 
 	spans, err := h.services.SpanRepo.ListByUser(c.Request.Context(), userID, opts)
 	if err != nil {
@@ -83,10 +89,13 @@ func (h *TraceHandler) ListByUser(c *gin.Context) {
 	})
 }
 
-// ListByAgent 查询 Agent 所有 Span。
+// ListByAgent returns all spans for an agent.
 func (h *TraceHandler) ListByAgent(c *gin.Context) {
 	agentName := c.Param("agent_name")
-	opts := parseListOptions(c)
+	opts, ok := parseListOptions(c)
+	if !ok {
+		return
+	}
 
 	spans, err := h.services.SpanRepo.ListByAgent(c.Request.Context(), agentName, opts)
 	if err != nil {
@@ -100,12 +109,10 @@ func (h *TraceHandler) ListByAgent(c *gin.Context) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// 公共辅助
-// ---------------------------------------------------------------------------
-
-// parseListOptions 解析 query 参数到 ListOptions。
-func parseListOptions(c *gin.Context) domain.ListOptions {
+// parseListOptions parses query params into ListOptions, validating against
+// the domain enum allow-lists. Returns ok=false if any param is invalid; the
+// function has already written a 400 response to c in that case.
+func parseListOptions(c *gin.Context) (domain.ListOptions, bool) {
 	opts := domain.ListOptions{
 		Limit:     100,
 		OrderBy:   "timestamp",
@@ -113,31 +120,70 @@ func parseListOptions(c *gin.Context) domain.ListOptions {
 	}
 
 	if v := c.Query("limit"); v != "" {
-		opts.Limit = parseIntDefault(v, 100)
+		n, ok := parseInt(v)
+		if !ok || n <= 0 {
+			BadRequest(c, "invalid limit")
+			return opts, false
+		}
+		if n > 1000 {
+			n = 1000
+		}
+		opts.Limit = n
 	}
 	if v := c.Query("offset"); v != "" {
-		opts.Offset = parseIntDefault(v, 0)
+		n, ok := parseInt(v)
+		if !ok || n < 0 {
+			BadRequest(c, "invalid offset")
+			return opts, false
+		}
+		opts.Offset = n
 	}
 	if v := c.Query("status"); v != "" {
-		opts.Status = domain.SpanStatus(v)
+		s := domain.SpanStatus(v)
+		if !domain.IsValidSpanStatus(s) {
+			BadRequest(c, "invalid status: must be one of ok, error, timeout")
+			return opts, false
+		}
+		opts.Status = s
 	}
 	if v := c.Query("type"); v != "" {
-		opts.Type = domain.SpanType(v)
+		t := domain.SpanType(v)
+		if !domain.IsValidSpanType(t) {
+			BadRequest(c, "invalid type: must be one of agent, llm, tool, reasoning, evaluation")
+			return opts, false
+		}
+		opts.Type = t
 	}
 	if v := c.Query("from"); v != "" {
-		if t, ok := parseTime(v); ok {
-			opts.From = &t
+		t, ok := parseTime(v)
+		if !ok {
+			BadRequest(c, "invalid from (RFC3339 expected)")
+			return opts, false
 		}
+		opts.From = &t
 	}
 	if v := c.Query("to"); v != "" {
-		if t, ok := parseTime(v); ok {
-			opts.To = &t
+		t, ok := parseTime(v)
+		if !ok {
+			BadRequest(c, "invalid to (RFC3339 expected)")
+			return opts, false
 		}
+		opts.To = &t
+	}
+	if opts.From != nil && opts.To != nil && opts.From.After(*opts.To) {
+		BadRequest(c, "from must be before to")
+		return opts, false
+	}
+	if v := c.Query("order_by"); v != "" {
+		if _, ok := domain.ValidOrderBy[v]; !ok {
+			BadRequest(c, "invalid order_by: must be one of timestamp, cost, tokens, latency, start_time")
+			return opts, false
+		}
+		opts.OrderBy = v
 	}
 	if v := c.Query("order_desc"); v == "true" {
 		opts.OrderDesc = true
 	}
 
-	return opts
+	return opts, true
 }
-

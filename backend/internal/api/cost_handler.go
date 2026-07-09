@@ -1,4 +1,4 @@
-﻿// Package api - Cost Handler銆?
+﻿// Package api - Cost Handler.
 package api
 
 import (
@@ -12,13 +12,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CostHandler 鎴愭湰褰掑洜鎺ュ彛銆?
+// CostHandler serves cost attribution endpoints.
 type CostHandler struct {
 	services *service.Container
 	logger   logger.Logger
 }
 
-// NewCostHandler 鍒涘缓澶勭悊鍣ㄣ€?
+// NewCostHandler creates the handler.
 func NewCostHandler(services *service.Container, log logger.Logger) *CostHandler {
 	return &CostHandler{
 		services: services,
@@ -26,18 +26,23 @@ func NewCostHandler(services *service.Container, log logger.Logger) *CostHandler
 	}
 }
 
-// Breakdown 浜旂淮鎴愭湰褰掑洜銆?
+// maxWindow is the largest window a single cost query may span.
+// Prevents accidental "fetch last 5 years" requests from blowing up the DB.
+const maxWindow = 90 * 24 * time.Hour
+
+// Breakdown returns cost attribution across the requested dimensions.
 //
 // GET /api/v1/cost/breakdown?from=&to=&dimensions=user,agent,tool&limit=10
 func (h *CostHandler) Breakdown(c *gin.Context) {
 	window, ok := parseWindow(c)
 	if !ok {
-		BadRequest(c, "from and to are required (RFC3339)")
 		return
 	}
 
-	dimsParam := c.DefaultQuery("dimensions", "user,agent,tool,model")
-	dims := parseDimensions(dimsParam)
+	dims, ok := parseDimensions(c, c.DefaultQuery("dimensions", "user,agent,tool,model"))
+	if !ok {
+		return
+	}
 
 	limit := parseIntDefault(c.Query("limit"), 100)
 
@@ -53,17 +58,20 @@ func (h *CostHandler) Breakdown(c *gin.Context) {
 	})
 }
 
-// Timeline 鎴愭湰鏃堕棿搴忓垪銆?
+// Timeline returns cost time-series.
 //
 // GET /api/v1/cost/timeline?from=&to=&granularity=hour|day
 func (h *CostHandler) Timeline(c *gin.Context) {
 	window, ok := parseWindow(c)
 	if !ok {
-		BadRequest(c, "from and to are required (RFC3339)")
 		return
 	}
 
 	granularity := c.DefaultQuery("granularity", "hour")
+	if granularity != "hour" && granularity != "day" {
+		BadRequest(c, "granularity must be 'hour' or 'day'")
+		return
+	}
 
 	points, err := h.services.CostService.Timeline(c.Request.Context(), window, granularity)
 	if err != nil {
@@ -78,13 +86,12 @@ func (h *CostHandler) Timeline(c *gin.Context) {
 	})
 }
 
-// Total 鏃堕棿绐楀彛鍐呮€绘垚鏈€?
+// Total returns total cost in a window.
 //
 // GET /api/v1/cost/total?from=&to=
 func (h *CostHandler) Total(c *gin.Context) {
 	window, ok := parseWindow(c)
 	if !ok {
-		BadRequest(c, "from and to are required (RFC3339)")
 		return
 	}
 
@@ -101,35 +108,45 @@ func (h *CostHandler) Total(c *gin.Context) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// 杈呭姪
-// ---------------------------------------------------------------------------
-
-// parseWindow 瑙ｆ瀽鏃堕棿绐楀彛銆?
+// parseWindow parses from/to query params into a TimeWindow.
+//
+// from and to are now REQUIRED (no silent 24h default). Window length is
+// also capped at maxWindow to prevent accidental huge scans.
 func parseWindow(c *gin.Context) (domain.TimeWindow, bool) {
 	fromStr := c.Query("from")
 	toStr := c.Query("to")
 
 	if fromStr == "" || toStr == "" {
-		// 榛樿鏈€杩?24h
-		to := time.Now()
-		from := to.Add(-24 * time.Hour)
-		return domain.TimeWindow{From: from, To: to}, true
+		BadRequest(c, "from and to are required (RFC3339)")
+		return domain.TimeWindow{}, false
 	}
 
 	from, ok1 := parseTime(fromStr)
 	to, ok2 := parseTime(toStr)
 	if !ok1 || !ok2 {
+		BadRequest(c, "from/to must be valid RFC3339 timestamps")
+		return domain.TimeWindow{}, false
+	}
+
+	if from.After(to) {
+		BadRequest(c, "from must be before to")
+		return domain.TimeWindow{}, false
+	}
+
+	if to.Sub(from) > maxWindow {
+		BadRequest(c, "window length exceeds maximum (90 days)")
 		return domain.TimeWindow{}, false
 	}
 
 	return domain.TimeWindow{From: from, To: to}, true
 }
 
-// parseDimensions 瑙ｆ瀽缁村害鍒楄〃銆?
-func parseDimensions(s string) []domain.CostDimension {
+// parseDimensions parses a comma-separated list of cost dimensions and
+// validates each against the allow-list. On invalid value, writes a 400 to c
+// (when c is non-nil) and returns ok=false.
+func parseDimensions(c *gin.Context, s string) ([]domain.CostDimension, bool) {
 	if s == "" {
-		return nil
+		return nil, true
 	}
 	parts := strings.Split(s, ",")
 	result := make([]domain.CostDimension, 0, len(parts))
@@ -138,8 +155,14 @@ func parseDimensions(s string) []domain.CostDimension {
 		if p == "" {
 			continue
 		}
-		result = append(result, domain.CostDimension(p))
+		d := domain.CostDimension(p)
+		if !domain.IsValidCostDimension(d) {
+			if c != nil {
+				BadRequest(c, "invalid dimension: must be one of user, session, agent, tool, reasoning_step, model")
+			}
+			return nil, false
+		}
+		result = append(result, d)
 	}
-	return result
+	return result, true
 }
-

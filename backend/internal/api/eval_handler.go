@@ -63,8 +63,10 @@ func (h *EvalHandler) GetBySpanID(c *gin.Context) {
 // ListByAgent lists all evaluations for an agent.
 func (h *EvalHandler) ListByAgent(c *gin.Context) {
 	agentName := c.Param("agent_name")
-	opts := parseListOptions(c)
-
+	opts, ok := parseListOptions(c)
+	if !ok {
+		return
+	}
 	evals, err := h.services.EvalService.ListByAgent(c.Request.Context(), agentName, opts)
 	if err != nil {
 		InternalErrorLog(c, h.logger, err)
@@ -120,3 +122,5 @@ func (h *EvalHandler) EvaluateNow(c *gin.Context) {
 
 	c.JSON(http.StatusOK, eval)
 }
+
+

@@ -236,6 +236,13 @@ func (r *ClickHouseSpanRepo) ListByAgent(ctx context.Context, agentName string, 
 	return r.list(ctx, &opts, "agent_name = ?", agentName)
 }
 
+// ListAllInWindow lists spans across all users/agents within a time window.
+// Used by ClusterService.RunAnalysis and any operation that needs a global
+// view (admin tools, periodic aggregation, etc.).
+func (r *ClickHouseSpanRepo) ListAllInWindow(ctx context.Context, opts domain.ListOptions) ([]*domain.Span, error) {
+	return r.list(ctx, &opts, "1=1")
+}
+
 // GetTraceTree 查询完整调用树。
 func (r *ClickHouseSpanRepo) GetTraceTree(ctx context.Context, traceID string) (*domain.TraceTree, error) {
 	spans, err := r.GetByTraceID(ctx, traceID)
@@ -361,3 +368,15 @@ func truncate(s string, maxChars int) string {
 	}
 	return string(runes[:maxChars])
 }
+
+// orderByColumnMap is the SQL-injection-safe allow-list for ORDER BY columns.
+// Map keys are the public API values (from domain.ValidOrderBy); values are
+// the actual ClickHouse column names. The repository refuses any other input.
+var orderByColumnMap = map[string]string{
+	"timestamp":  "timestamp",
+	"cost":       "cost_usd",
+	"tokens":     "total_tokens",
+	"latency":    "latency_ms",
+	"start_time": "start_time",
+}
+

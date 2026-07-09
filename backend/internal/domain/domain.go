@@ -1,4 +1,4 @@
-// Package domain 定义 AgentPulse 的领域模型与抽象接口。
+﻿// Package domain 定义 AgentPulse 的领域模型与抽象接口。
 //
 // 本包是业务核心，不依赖任何外部实现（数据库、HTTP、第三方 SDK）。
 // 所有 Repository、Service 都依赖本包定义的接口，实现层在 repository/ 和 service/ 中。
@@ -11,12 +11,9 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 )
-
-// ============================================================================
-// Span 实体
-// ============================================================================
 
 // SpanType Span 类型枚举。
 //
@@ -258,7 +255,7 @@ const (
 	DimensionModel     CostDimension = "model"
 )
 
-// AllCostDimensions 返回所有成本维度。
+// AllCostDimensions returns all cost dimensions.
 func AllCostDimensions() []CostDimension {
 	return []CostDimension{
 		DimensionUser,
@@ -343,6 +340,7 @@ type SpanRepository interface {
 	ListBySession(ctx context.Context, sessionID string, opts ListOptions) ([]*Span, error)
 	ListByUser(ctx context.Context, userID string, opts ListOptions) ([]*Span, error)
 	ListByAgent(ctx context.Context, agentName string, opts ListOptions) ([]*Span, error)
+	ListAllInWindow(ctx context.Context, opts ListOptions) ([]*Span, error)
 
 	// Trace 回放
 	GetTraceTree(ctx context.Context, traceID string) (*TraceTree, error)
@@ -567,3 +565,75 @@ type FailureClusterService interface {
 	// GetCluster 获取单个聚类详情。
 	GetCluster(ctx context.Context, id string) (*FailureCluster, error)
 }
+
+
+
+// ============================================================================
+// Sentinel Errors
+// ============================================================================
+//
+// Use errors.Is to detect these in handlers and return appropriate HTTP
+// status codes (ErrNotFound -> 404, ErrInvalidInput -> 400, etc.).
+var (
+	ErrNotFound      = errors.New("not found")
+	ErrInvalidInput  = errors.New("invalid input")
+	ErrServiceClosed = errors.New("service closed")
+	ErrUnauthorized  = errors.New("unauthorized")
+)
+
+// ValidSpanTypes lists all legal SpanType values for input validation.
+var ValidSpanTypes = map[SpanType]struct{}{
+	SpanTypeAgent:      {},
+	SpanTypeLLM:        {},
+	SpanTypeTool:       {},
+	SpanTypeReasoning:  {},
+	SpanTypeEvaluation: {},
+}
+
+// ValidSpanStatuses lists all legal SpanStatus values.
+var ValidSpanStatuses = map[SpanStatus]struct{}{
+	SpanStatusOK:      {},
+	SpanStatusError:   {},
+	SpanStatusTimeout: {},
+}
+
+// IsValidSpanType reports whether t is a known SpanType.
+func IsValidSpanType(t SpanType) bool {
+	_, ok := ValidSpanTypes[t]
+	return ok
+}
+
+// IsValidSpanStatus reports whether s is a known SpanStatus.
+func IsValidSpanStatus(s SpanStatus) bool {
+	_, ok := ValidSpanStatuses[s]
+	return ok
+}
+
+// ValidOrderBy lists the columns allowed in SpanListOptions.OrderBy.
+// The query builder refuses any other value (SQL injection guard).
+var ValidOrderBy = map[string]struct{}{
+	"timestamp":  {},
+	"cost":       {},
+	"tokens":     {},
+	"latency":    {},
+	"start_time": {},
+}
+
+
+
+// ValidCostDimensions is the allow-list for CostDimension input validation.
+var ValidCostDimensions = map[CostDimension]struct{}{
+	DimensionUser:      {},
+	DimensionSession:   {},
+	DimensionAgent:     {},
+	DimensionTool:      {},
+	DimensionReasoning: {},
+	DimensionModel:     {},
+}
+
+// IsValidCostDimension reports whether d is a known CostDimension.
+func IsValidCostDimension(d CostDimension) bool {
+	_, ok := ValidCostDimensions[d]
+	return ok
+}
+

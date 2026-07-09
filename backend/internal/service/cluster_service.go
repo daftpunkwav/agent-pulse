@@ -61,9 +61,9 @@ func (s *ClusterService) RunAnalysis(
 		OrderDesc: false,
 	}
 
-	// 获取所有 agent 的错误（简化：只取 agent 维度第一个，后续可改）
-	// 实际应该按 agent_name 分组
-	spans, err := s.spanRepo.ListByUser(ctx, "", opts)
+	// 获取所有 agent 的错误(全量,使用 ListAllInWindow 显式表示意图)。
+	// 之前用 ListByUser(ctx, "") 实际只返回 user_id='' 的 Span,导致聚类空跑。
+	spans, err := s.spanRepo.ListAllInWindow(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("list error spans: %w", err)
 	}

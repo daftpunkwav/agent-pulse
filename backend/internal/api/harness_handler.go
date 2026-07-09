@@ -176,7 +176,10 @@ func NewABTestHandler(services *service.Container, log logger.Logger) *ABTestHan
 
 // List 列出所有 A/B 测试。
 func (h *ABTestHandler) List(c *gin.Context) {
-	opts := parseListOptions(c)
+	opts, ok := parseListOptions(c)
+	if !ok {
+		return
+	}
 
 	tests, err := h.services.MetadataRepo.ListABTests(c.Request.Context(), opts)
 	if err != nil {
@@ -244,4 +247,6 @@ func (h *ABTestHandler) Create(c *gin.Context) {
 
 // _ 防止 unused import 警告（strconv 用于 parseInt）
 var _ = strconv.Itoa
+
+
 
