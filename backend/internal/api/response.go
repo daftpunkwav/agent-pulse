@@ -96,10 +96,14 @@ func parseIntDefault(s string, def int) int {
 	return def
 }
 
-// parseTime parses RFC3339 time string.
+// parseTime 解析 RFC3339 / RFC3339Nano 时间字符串。
+//
+// 前端 toISOString() 带毫秒，需兼容 RFC3339Nano。
 func parseTime(s string) (time.Time, bool) {
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t, true
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
 	}
 	return time.Time{}, false
 }

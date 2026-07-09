@@ -4,6 +4,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/agentpulse/backend/internal/domain"
 	"github.com/agentpulse/backend/internal/service"
 	"github.com/agentpulse/backend/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -31,6 +32,9 @@ func (h *ClusterHandler) List(c *gin.Context) {
 	if err != nil {
 		InternalErrorLog(c, h.logger, err)
 		return
+	}
+	if clusters == nil {
+		clusters = []*domain.FailureCluster{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

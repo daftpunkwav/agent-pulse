@@ -57,7 +57,7 @@ func (c *ChromaClient) Ping() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	req, err := c.newRequest(ctx, http.MethodGet, "/api/v2/heartbeat", nil)
+	req, err := c.newRequest(ctx, http.MethodGet, "/api/v1/heartbeat", nil)
 	if err != nil {
 		return err
 	}

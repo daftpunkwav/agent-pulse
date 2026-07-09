@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -81,7 +82,7 @@ func (s *CostService) breakdownOne(
 		return nil, fmt.Errorf("clickhouse client not available")
 	}
 
-	dimCol, whereExtra, err := dimensionConfig(dim)
+	dimCol, whereExtra, spanType, err := dimensionConfig(dim)
 	if err != nil {
 		return nil, err
 	}
@@ -89,12 +90,12 @@ func (s *CostService) breakdownOne(
 	query := fmt.Sprintf(`
 		SELECT
 			%s AS key,
-			sum(cost_usd) AS cost_usd,
+			sum(toFloat64(cost_usd)) AS cost_usd,
 			sum(total_tokens) AS tokens,
 			count() AS call_count
 		FROM agent_spans
 		WHERE timestamp >= ? AND timestamp <= ?
-		  AND span_type = 'llm'
+		  AND span_type = ?
 		  %s
 		GROUP BY key
 		ORDER BY cost_usd DESC
@@ -130,7 +131,7 @@ func (s *CostService) breakdownOne(
 		totalCost += costUSD
 		totalTokens += tokens
 		return nil
-	}, window.From, window.To, limit)
+	}, window.From, window.To, spanType, limit)
 
 	if err != nil {
 		return nil, err
@@ -156,11 +157,13 @@ func (s *CostService) TotalCost(ctx context.Context, window domain.TimeWindow) (
 	`
 
 	var result struct {
+		// 用 SQL 端 toFloat64 转换,避免 clickhouse-go 的 Decimal→float64 unsupported 错误。
 		TotalCost   float64 `ch:"total_cost"`
 		TotalTokens uint64  `ch:"total_tokens"`
 	}
 
-	row := s.client.Conn().QueryRow(ctx, query, window.From, window.To)
+	_ = query
+	row := s.client.Conn().QueryRow(ctx, strings.Replace(query, "sum(cost_usd)", "sum(toFloat64(cost_usd))", 1), window.From, window.To)
 	if err := row.ScanStruct(&result); err != nil {
 		return 0, 0, fmt.Errorf("query total cost: %w", err)
 	}
@@ -191,7 +194,7 @@ func (s *CostService) Timeline(
 	query := fmt.Sprintf(`
 		SELECT
 			%s(timestamp) AS bucket,
-			sum(cost_usd) AS cost_usd,
+			sum(toFloat64(cost_usd)) AS cost_usd,
 			sum(total_tokens) AS tokens,
 			count() AS call_count
 		FROM agent_spans
@@ -230,22 +233,22 @@ type TimelinePoint struct {
 // 内部辅助
 // ---------------------------------------------------------------------------
 
-// dimensionConfig 维度对应的 SQL 列名与 WHERE 条件。
-func dimensionConfig(dim domain.CostDimension) (string, string, error) {
+// dimensionConfig 维度对应的 SQL 列名、WHERE 条件与 span_type 过滤。
+func dimensionConfig(dim domain.CostDimension) (col, whereExtra, spanType string, err error) {
 	switch dim {
 	case domain.DimensionUser:
-		return "user_id", " AND user_id != ''", nil
+		return "user_id", " AND user_id != ''", "llm", nil
 	case domain.DimensionSession:
-		return "session_id", " AND session_id != ''", nil
+		return "session_id", " AND session_id != ''", "llm", nil
 	case domain.DimensionAgent:
-		return "agent_name", "", nil
+		return "agent_name", "", "llm", nil
 	case domain.DimensionTool:
-		return "tool_name", " AND span_type = 'tool' AND tool_name != ''", nil
+		return "tool_name", " AND tool_name != ''", "tool", nil
 	case domain.DimensionReasoning:
-		return "toString(reasoning_step)", " AND span_type = 'reasoning'", nil
+		return "toString(reasoning_step)", "", "reasoning", nil
 	case domain.DimensionModel:
-		return "model", " AND model != ''", nil
+		return "model", " AND model != ''", "llm", nil
 	default:
-		return "", "", fmt.Errorf("unknown dimension: %s", dim)
+		return "", "", "", fmt.Errorf("unknown dimension: %s", dim)
 	}
 }

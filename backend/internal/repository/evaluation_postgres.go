@@ -202,11 +202,11 @@ func (r *PostgresEvaluationRepo) AverageScores(
 	window domain.TimeWindow,
 ) (map[domain.EvaluationDimension]float32, error) {
 	const query = `SELECT
-		AVG(accuracy)::real       AS accuracy,
-		AVG(completeness)::real   AS completeness,
-		AVG(tool_selection)::real AS tool_selection,
-		AVG(reasoning_depth)::real AS reasoning_depth,
-		AVG(helpfulness)::real    AS helpfulness
+		COALESCE(AVG(accuracy), 0)::real       AS accuracy,
+		COALESCE(AVG(completeness), 0)::real   AS completeness,
+		COALESCE(AVG(tool_selection), 0)::real AS tool_selection,
+		COALESCE(AVG(reasoning_depth), 0)::real AS reasoning_depth,
+		COALESCE(AVG(helpfulness), 0)::real    AS helpfulness
 	FROM evaluations
 	WHERE agent_name = $1
 	  AND created_at >= $2

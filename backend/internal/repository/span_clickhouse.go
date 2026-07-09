@@ -3,14 +3,18 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/agentpulse/backend/internal/domain"
 	"github.com/agentpulse/backend/pkg/logger"
+	"github.com/shopspring/decimal"
 )
 
 // ClickHouseSpanRepo 是 SpanRepository 的 ClickHouse 实现。
@@ -60,6 +64,16 @@ type spanRow struct {
 	ErrorMessage     string    `ch:"error_message"`
 	Attributes       string    `ch:"attributes"`
 }
+
+// spanSelectSQL 查询列：cost_usd 用 toFloat64 避免 Decimal 扫描失败。
+const spanSelectSQL = `SELECT
+	timestamp, trace_id, span_id, parent_span_id, session_id, user_id,
+	agent_name, service_name, environment, span_type, span_name, status,
+	model, prompt_tokens, completion_tokens, total_tokens,
+	toFloat64(cost_usd) AS cost_usd,
+	finish_reason, tool_name, reasoning_step, latency_ms,
+	input_preview, output_preview, error_message, attributes
+FROM agent_spans`
 
 func (r spanRow) toDomain() *domain.Span {
 	s := &domain.Span{
@@ -162,7 +176,7 @@ func (r *ClickHouseSpanRepo) BatchInsert(ctx context.Context, spans []*domain.Sp
 			span.PromptTokens,
 			span.CompletionTokens,
 			span.TotalTokens,
-			span.CostUSD,
+			floatToDecimal128(span.CostUSD, 6),
 			span.FinishReason,
 			span.ToolName,
 			span.ReasoningStep,
@@ -185,17 +199,33 @@ func (r *ClickHouseSpanRepo) BatchInsert(ctx context.Context, spans []*domain.Sp
 	return nil
 }
 
+// floatToDecimal128 把 float64 转换为 shopspring.Decimal 以写入 ClickHouse Decimal 列。
+//
+// scale 表示小数位数(如 6 代表 0.000001 步长)。
+// shopspring 的 exp 是负指数,所以这里用 -scale。
+func floatToDecimal128(v float64, scale int32) decimal.Decimal {
+	if v == 0 {
+		return decimal.New(0, -scale)
+	}
+	mul := math.Pow(10, float64(scale))
+	scaled := math.Round(v * mul)
+	return decimal.New(int64(scaled), -scale)
+}
+
 // ---------------------------------------------------------------------------
 // 查询
 // ---------------------------------------------------------------------------
 
 // GetByID 根据 Span ID 查询。
 func (r *ClickHouseSpanRepo) GetByID(ctx context.Context, id string) (*domain.Span, error) {
-	const query = `SELECT * FROM agent_spans WHERE span_id = ? LIMIT 1`
+	query := spanSelectSQL + ` WHERE span_id = ? LIMIT 1`
 
 	var row spanRow
 	err := r.client.QueryRow(ctx, &row, query, id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("query span: %w", err)
 	}
 	return row.toDomain(), nil
@@ -203,7 +233,7 @@ func (r *ClickHouseSpanRepo) GetByID(ctx context.Context, id string) (*domain.Sp
 
 // GetByTraceID 查询 Trace 下所有 Span。
 func (r *ClickHouseSpanRepo) GetByTraceID(ctx context.Context, traceID string) ([]*domain.Span, error) {
-	const query = `SELECT * FROM agent_spans WHERE trace_id = ? ORDER BY timestamp ASC, span_id ASC`
+	query := spanSelectSQL + ` WHERE trace_id = ? ORDER BY timestamp ASC, span_id ASC`
 
 	var spans []*domain.Span
 	err := r.client.QueryRows(ctx, query, func(rows driver.Rows) error {
@@ -322,7 +352,9 @@ func (r *ClickHouseSpanRepo) list(ctx context.Context, opts *domain.ListOptions,
 
 	orderBy := "timestamp"
 	if opts.OrderBy != "" {
-		orderBy = opts.OrderBy
+		if col, ok := orderByColumnMap[opts.OrderBy]; ok {
+			orderBy = col
+		}
 	}
 	order := "ASC"
 	if opts.OrderDesc {
@@ -335,7 +367,8 @@ func (r *ClickHouseSpanRepo) list(ctx context.Context, opts *domain.ListOptions,
 	}
 
 	query := fmt.Sprintf(
-		"SELECT * FROM agent_spans WHERE %s ORDER BY %s %s LIMIT %d",
+		"%s WHERE %s ORDER BY %s %s LIMIT %d",
+		spanSelectSQL,
 		strings.Join(conditions, " AND "),
 		orderBy, order,
 		limit,
@@ -377,6 +410,6 @@ var orderByColumnMap = map[string]string{
 	"cost":       "cost_usd",
 	"tokens":     "total_tokens",
 	"latency":    "latency_ms",
-	"start_time": "start_time",
+	"start_time": "timestamp",
 }
 

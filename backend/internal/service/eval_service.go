@@ -59,15 +59,20 @@ type EvalServiceConfig struct {
 func NewEvalService(
 	evalRepo domain.EvaluationRepository,
 	spanRepo domain.SpanRepository,
+	cfg EvalServiceConfig,
 	log logger.Logger,
 ) *EvalService {
-	cfg := EvalServiceConfig{
-		Model:      "gpt-4o-mini",
-		APIKey:     "",
-		BaseURL:    "",
-		SampleRate: 1.0,
-		Workers:    3,
-		QueueSize:  1000,
+	if cfg.Model == "" {
+		cfg.Model = "gpt-4o-mini"
+	}
+	if cfg.SampleRate <= 0 {
+		cfg.SampleRate = 1.0
+	}
+	if cfg.Workers <= 0 {
+		cfg.Workers = 3
+	}
+	if cfg.QueueSize <= 0 {
+		cfg.QueueSize = 1000
 	}
 
 	s := &EvalService{
@@ -81,7 +86,11 @@ func NewEvalService(
 	}
 
 	if cfg.APIKey != "" {
-		s.judgeClient = openai.NewClient(cfg.APIKey)
+		openaiCfg := openai.DefaultConfig(cfg.APIKey)
+		if cfg.BaseURL != "" {
+			openaiCfg.BaseURL = cfg.BaseURL
+		}
+		s.judgeClient = openai.NewClientWithConfig(openaiCfg)
 	}
 
 	// 启动 worker

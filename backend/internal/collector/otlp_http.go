@@ -126,9 +126,10 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 异步写入(不阻塞 OTLP 响应),失败通过 PartialSuccess 反馈。
-	// 注意: 必须从 r.Context() 派生,关闭/超时会自动传播。
+	// 使用独立的 background ctx: r.Context() 在 handler 返回后立即取消,
+	// 会导致异步写入在 ctx canceled 中失败。
 	go func() {
-		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		defer func() {
 			if rec := recover(); rec != nil {

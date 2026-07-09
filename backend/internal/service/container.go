@@ -13,6 +13,7 @@ package service
 import (
 	"context"
 
+	"github.com/agentpulse/backend/internal/config"
 	"github.com/agentpulse/backend/internal/domain"
 	"github.com/agentpulse/backend/internal/repository"
 	"github.com/agentpulse/backend/pkg/logger"
@@ -43,7 +44,7 @@ type Container struct {
 }
 
 // NewContainer 创建服务容器。
-func NewContainer(repos *repository.Container, log logger.Logger) *Container {
+func NewContainer(repos *repository.Container, cfg *config.Config, log logger.Logger) *Container {
 	c := &Container{
 		SpanRepo:     repos.Span,
 		EvalRepo:     repos.Evaluation,
@@ -54,7 +55,16 @@ func NewContainer(repos *repository.Container, log logger.Logger) *Container {
 
 	c.SpanService = NewSpanService(repos.Span, repos.Pricing, log)
 	c.CostService = NewCostService(repos.Span, repos.Pricing, log)
-	c.EvalService = NewEvalService(repos.Evaluation, repos.Span, log)
+
+	evalCfg := EvalServiceConfig{
+		Model:      cfg.Judge.Model,
+		APIKey:     cfg.Judge.APIKey,
+		BaseURL:    cfg.Judge.BaseURL,
+		SampleRate: float32(cfg.Evaluation.SampleRate),
+		Workers:    cfg.Evaluation.AsyncWorkers,
+		QueueSize:  cfg.Evaluation.AsyncQueueSize,
+	}
+	c.EvalService = NewEvalService(repos.Evaluation, repos.Span, evalCfg, log)
 	c.ClusterService = NewClusterService(repos.Span, repos.Metadata, repos.Vector, log)
 
 	return c

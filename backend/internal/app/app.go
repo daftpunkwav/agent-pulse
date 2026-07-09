@@ -71,7 +71,7 @@ func New(cfg *config.Config, log logger.Logger) (*Application, error) {
 	}
 
 	repos := app.initRepositories()
-	app.services = service.NewContainer(repos, log)
+	app.services = service.NewContainer(repos, cfg, log)
 	// Inject self as the health pinger for /readyz.
 	app.services.HealthPinger = app
 
