@@ -26,9 +26,9 @@ import functools
 import inspect
 import json
 import logging
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Any, Callable, Optional, TypeVar
 
-from agentpulse.spans import Session, get_current_session, get_client
+from agentpulse.spans import trace
 
 logger = logging.getLogger(__name__)
 

@@ -29,11 +29,10 @@
             t.set_output(result)
 """
 
+from agentpulse._version import __version__
 from agentpulse.client import Client, init, get_client, shutdown
 from agentpulse.decorators import observe, observe_async
 from agentpulse.spans import session, trace, span, current_span
-
-__version__ = "0.1.0"
 
 __all__ = [
     "Client",

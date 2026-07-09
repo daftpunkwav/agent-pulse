@@ -142,5 +142,44 @@ def test_api_key_validation():
     shutdown()
 
 
+def test_set_ap_attribute_preserves_numeric_types():
+    """测试 ap.* 属性保留数值类型。"""
+    from unittest.mock import MagicMock
+
+    from agentpulse.spans import _set_ap_attribute
+
+    span = MagicMock()
+    _set_ap_attribute(span, "prompt_tokens", 42)
+    span.set_attribute.assert_called_with("ap.prompt_tokens", 42)
+
+    span.reset_mock()
+    _set_ap_attribute(span, "ap.model", "gpt-4o")
+    span.set_attribute.assert_called_with("ap.model", "gpt-4o")
+
+
+def test_trace_sets_span_type():
+    """测试 trace() 写入 ap.span_type。"""
+    from unittest.mock import MagicMock, patch
+
+    from agentpulse.spans import trace as trace_cm
+
+    init(endpoint="http://localhost:8080", service_name="test-span-type")
+    mock_span = MagicMock()
+    mock_span.is_recording.return_value = True
+    mock_span.__enter__ = MagicMock(return_value=mock_span)
+    mock_span.__exit__ = MagicMock(return_value=False)
+
+    mock_tracer = MagicMock()
+    mock_tracer.start_as_current_span.return_value = mock_span
+
+    with patch("agentpulse.spans.get_client") as mock_get_client:
+        mock_get_client.return_value.get_tracer.return_value = mock_tracer
+        with trace_cm("llm-call", span_type="llm"):
+            pass
+
+    mock_span.set_attribute.assert_any_call("ap.span_type", "llm")
+    shutdown()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

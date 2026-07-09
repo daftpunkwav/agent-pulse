@@ -265,6 +265,23 @@ def session(
         yield sess
 
 
+def _set_ap_attribute(otel_span: Span, key: str, value: Any) -> None:
+    """写入 ap.* 属性，保留原生数值类型，避免重复 ap. 前缀。"""
+    attr_key = key if key.startswith("ap.") else f"ap.{key}"
+    if isinstance(value, bool):
+        otel_span.set_attribute(attr_key, value)
+    elif isinstance(value, int):
+        otel_span.set_attribute(attr_key, value)
+    elif isinstance(value, float):
+        otel_span.set_attribute(attr_key, value)
+    elif isinstance(value, str):
+        otel_span.set_attribute(attr_key, value)
+    elif isinstance(value, (list, tuple)):
+        otel_span.set_attribute(attr_key, [str(v) for v in value])
+    else:
+        otel_span.set_attribute(attr_key, str(value))
+
+
 @contextlib.contextmanager
 def trace(
     name: str,
@@ -283,15 +300,18 @@ def trace(
     """
     tracer = get_client().get_tracer()
     with tracer.start_as_current_span(name) as otel_span:
+        # 写入 span 类型，供后端 collector 正确映射
+        otel_span.set_attribute("ap.span_type", span_type)
+
         # 应用 Session 上下文
         sess = get_current_session()
         if sess:
             for key, value in sess.to_attributes().items():
                 otel_span.set_attribute(key, value)
 
-        # 应用显式传入的 attrs
+        # 应用显式传入的 attrs（如 model、agent_name 等）
         for key, value in attrs.items():
-            otel_span.set_attribute(f"ap.{key}", str(value))
+            _set_ap_attribute(otel_span, key, value)
 
         wrapper = SpanWrapper(otel_span, span_type=span_type, name=name)
         try:

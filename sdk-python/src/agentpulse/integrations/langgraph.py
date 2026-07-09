@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def create_agentpulse_tracer(agent_name: str = "") -> "AgentPulseCallback":
+def create_agentpulse_callback(agent_name: str = "") -> "AgentPulseCallback":
     """创建 LangGraph 兼容的 Callback Handler。
 
     LangGraph 通过 `config={"callbacks": [handler]}` 传入回调列表。
@@ -34,4 +34,7 @@ def create_agentpulse_tracer(agent_name: str = "") -> "AgentPulseCallback":
     return AgentPulseCallback(agent_name=agent_name)
 
 
-__all__ = ["create_agentpulse_tracer"]
+__all__ = ["create_agentpulse_callback"]
+
+# 向后兼容旧函数名
+create_agentpulse_tracer = create_agentpulse_callback

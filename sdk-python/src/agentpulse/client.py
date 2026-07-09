@@ -25,6 +25,8 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
+from agentpulse._version import __version__
+
 logger = logging.getLogger(__name__)
 
 _OTLP_HTTP_PORT = 4318
@@ -161,7 +163,7 @@ class Client:
         self._tracer_provider = provider
         self._tracer = provider.get_tracer(
             instrumenting_module_name="agentpulse",
-            instrumenting_library_version="0.1.0",
+            instrumenting_library_version=__version__,
         )
 
         self._initialized = True
