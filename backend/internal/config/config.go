@@ -186,7 +186,7 @@ func (c ChromaConfig) BaseURL() string {
 // JudgeConfig LLM-as-Judge 评估器配置。
 type JudgeConfig struct {
 	Model       string        `mapstructure:"model" validate:"required"`
-	APIKey      string        `mapstructure:"api_key" validate:"required"`
+	APIKey      string        `mapstructure:"api_key"`
 	BaseURL     string        `mapstructure:"base_url"`
 	Timeout     time.Duration `mapstructure:"timeout"`
 	MaxRetries  int           `mapstructure:"max_retries"`
@@ -329,10 +329,8 @@ func setDefaults(v *viper.Viper) {
 
 func validate(cfg *Config) error {
 	v := validator.New()
-	if err := v.Struct(cfg); err != nil {
-		return err
-	}
 
+	// 自定义校验必须在 Struct 之前执行，以便覆盖 validator 默认错误信息。
 	// 1. release 模式: 禁止默认密码 / 空白密码。
 	if cfg.Server.Mode == "release" {
 		if cfg.Postgres.Password == "" || cfg.Postgres.Password == "changeme" {
@@ -351,6 +349,11 @@ func validate(cfg *Config) error {
 		if len(k) < 16 {
 			return fmt.Errorf("auth.api_keys contains a key shorter than 16 chars; refuse to accept weak keys")
 		}
+	}
+
+	// 3. 执行 struct tag 验证（覆盖所有 required/min/max 等）。
+	if err := v.Struct(cfg); err != nil {
+		return err
 	}
 
 	return nil

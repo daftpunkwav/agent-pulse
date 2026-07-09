@@ -12,7 +12,7 @@ import (
 
 // BadRequest 400 error response.
 func BadRequest(c *gin.Context, msg string) {
-	c.JSON(http.StatusBadRequest, gin.H{
+	c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 		"error":      "bad_request",
 		"message":    msg,
 		"request_id": c.GetString("request_id"),
@@ -21,7 +21,7 @@ func BadRequest(c *gin.Context, msg string) {
 
 // NotFound 404 error response.
 func NotFound(c *gin.Context, msg string) {
-	c.JSON(http.StatusNotFound, gin.H{
+	c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 		"error":      "not_found",
 		"message":    msg,
 		"request_id": c.GetString("request_id"),
@@ -39,7 +39,7 @@ func Unauthorized(c *gin.Context, msg string) {
 
 // ServiceUnavailable 503 error response (dependency unavailable).
 func ServiceUnavailable(c *gin.Context, msg string) {
-	c.JSON(http.StatusServiceUnavailable, gin.H{
+	c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
 		"error":      "service_unavailable",
 		"message":    msg,
 		"request_id": c.GetString("request_id"),
@@ -56,7 +56,7 @@ func InternalError(c *gin.Context, err error) {
 	if rid == "" {
 		rid = "unknown"
 	}
-	c.JSON(http.StatusInternalServerError, gin.H{
+	c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 		"error":      "internal_error",
 		"message":    "an internal error occurred, please retry with the request_id for support",
 		"request_id": rid,
