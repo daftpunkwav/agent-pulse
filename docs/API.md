@@ -303,7 +303,7 @@ OpenTelemetry OTLP/HTTP 接收端点。
 - 协议: [OTLP Trace Export](https://opentelemetry.io/docs/specs/otlp/#trace-export)
 - 兼容: 所有 OpenTelemetry 官方 SDK
 - 鉴权: `X-AgentPulse-Key` 头(必须,与 API Key 同一组)
-- Body 限制: 默认 10MB,可通过 `OTLP_MAX_BODY_SIZE` 调整
+- Body 限制: 默认 10MB,可通过 `AGENTPULSE_OTLP_MAX_BODY_SIZE` 调整
 - 超时: ReadHeader 5s / Read 30s / Write 30s
 
 支持 OTel GenAI 语义约定属性 + AgentPulse 自定义属性(`ap.*`)。
@@ -326,7 +326,27 @@ OpenTelemetry OTLP/HTTP 接收端点。
 
 ### GET /readyz
 
-同 /healthz（Phase 2 将扩展为真实健康检查）。
+就绪探针：调用依赖 `HealthCheck()`（ClickHouse + PostgreSQL），全部可用时返回 `200`。
+
+```json
+{
+  "status": "ready",
+  "version": "0.1.0",
+  "timestamp": "2026-07-09T10:00:00Z"
+}
+```
+
+依赖不可用时返回 `503`：
+
+```json
+{
+  "status": "not_ready",
+  "error": "clickhouse: connection refused",
+  "timestamp": "2026-07-09T10:00:00Z"
+}
+```
+
+> `/healthz` 仅表示进程存活；`/readyz` 表示可接受流量。K8s 应分别配置 liveness 与 readiness。
 
 ## 9. 错误响应
 
@@ -335,7 +355,7 @@ OpenTelemetry OTLP/HTTP 接收端点。
 ```json
 {
   "error": "internal_error",
-  "message": "具体错误信息",
+  "message": "an internal error occurred, please retry with the request_id for support",
   "request_id": "uuid"
 }
 ```
