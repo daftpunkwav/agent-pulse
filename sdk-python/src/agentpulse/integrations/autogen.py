@@ -1,24 +1,24 @@
-"""AutoGen 集成（基础支持）。
+"""AutoGen 集成。
 
-AutoGen 通过事件回调机制工作。
-完整适配器待 Phase 2 实现。
+包装 Agent 的 send/receive 及 a_send/a_receive 异步路径。
 """
 
 from __future__ import annotations
 
+import inspect
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
-from agentpulse.spans import get_client, trace
+from agentpulse.decorators import _safe_serialize
+from agentpulse.spans import trace
 
 logger = logging.getLogger(__name__)
 
 
 class AgentPulseAutoGenHook:
-    """AutoGen 回调钩子（基础实现）。
+    """AutoGen 回调钩子。
 
-    AutoGen 使用 on_send / on_receive 钩子函数。
-    本类提供 wrap_agent 装饰器，自动追踪 Agent 的 send/recv 事件。
+    提供 wrap_agent 装饰器，自动追踪 Agent 的 send/recv 及异步等价方法。
 
     用法::
 
@@ -28,38 +28,48 @@ class AgentPulseAutoGenHook:
 
     def __init__(self, agent_name: str = ""):
         self.agent_name = agent_name
-        self._span_active = False
 
     def wrap_agent(self, agent: Any) -> Any:
-        """包装 AutoGen Agent，自动追踪其 send/recv 事件。"""
-        original_send = getattr(agent, "send", None)
-        original_receive = getattr(agent, "receive", None)
-
-        if original_send is not None:
-            agent.send = self._wrap_send(original_send)
-        if original_receive is not None:
-            agent.receive = self._wrap_receive(original_receive)
-
+        """包装 AutoGen Agent，自动追踪其 send/recv 事件（含异步路径）。"""
+        for method_name in ("send", "receive", "a_send", "a_receive"):
+            original = getattr(agent, method_name, None)
+            if original is None or not callable(original):
+                continue
+            span_name = f"autogen.{method_name.lstrip('a_')}"
+            if inspect.iscoroutinefunction(original):
+                setattr(agent, method_name, self._wrap_async(original, span_name))
+            else:
+                setattr(agent, method_name, self._wrap_sync(original, span_name))
         return agent
 
-    def _wrap_send(self, original: Callable) -> Callable:
-        def wrapper(*args, **kwargs):
-            with trace("autogen.send", span_type="agent", agent_name=self.agent_name) as t:
-                t.set_input(str(args)[:500])
-                result = original(*args, **kwargs)
-                t.set_output(str(result)[:500])
+    def _wrap_sync(self, original: Callable[..., Any], span_name: str) -> Callable[..., Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            with trace(span_name, span_type="agent", agent_name=self.agent_name) as t:
+                t.set_input(_safe_serialize({"args": args, "kwargs": kwargs}, max_length=500))
+                try:
+                    result = original(*args, **kwargs)
+                except Exception as exc:
+                    t.record_exception(exc)
+                    raise
+                t.set_output(_safe_serialize(result, max_length=500))
                 t.set_status_ok()
                 return result
+
         return wrapper
 
-    def _wrap_receive(self, original: Callable) -> Callable:
-        def wrapper(*args, **kwargs):
-            with trace("autogen.receive", span_type="agent", agent_name=self.agent_name) as t:
-                t.set_input(str(args)[:500])
-                result = original(*args, **kwargs)
-                t.set_output(str(result)[:500])
+    def _wrap_async(self, original: Callable[..., Any], span_name: str) -> Callable[..., Any]:
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            with trace(span_name, span_type="agent", agent_name=self.agent_name) as t:
+                t.set_input(_safe_serialize({"args": args, "kwargs": kwargs}, max_length=500))
+                try:
+                    result = await original(*args, **kwargs)
+                except Exception as exc:
+                    t.record_exception(exc)
+                    raise
+                t.set_output(_safe_serialize(result, max_length=500))
                 t.set_status_ok()
                 return result
+
         return wrapper
 
 
