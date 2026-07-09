@@ -10,7 +10,7 @@ const navigation = [
   { name: "Traces", href: "/traces", icon: ListChecks },
   { name: "Cost", href: "/cost", icon: DollarSign },
   { name: "Evaluation", href: "/eval", icon: Gauge },
-  { name: "Clusters", href: "/clusters", icon: FlaskConical },
+  { name: "Failure Clusters", href: "/clusters", icon: FlaskConical },
   { name: "Harness", href: "/harness", icon: Beaker },
 ];
 

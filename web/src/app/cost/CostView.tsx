@@ -11,7 +11,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { swrFetcher } from "@/lib/api";
+import { createSchemaFetcher } from "@/lib/api";
 import {
   costBreakdownResponseSchema,
   costTimelineResponseSchema,
@@ -35,8 +35,7 @@ export function CostView() {
     mutate: mutateBreakdown,
   } = useSWR(
     `/api/backend/cost/breakdown?${windowParams}&dimensions=user,agent,model`,
-    async (url: string) =>
-      costBreakdownResponseSchema.parse(await swrFetcher(url))
+    createSchemaFetcher(costBreakdownResponseSchema)
   );
 
   const {
@@ -46,8 +45,7 @@ export function CostView() {
     mutate: mutateTimeline,
   } = useSWR(
     `/api/backend/cost/timeline?${windowParams}&granularity=day`,
-    async (url: string) =>
-      costTimelineResponseSchema.parse(await swrFetcher(url))
+    createSchemaFetcher(costTimelineResponseSchema)
   );
 
   const isLoading = breakdownLoading || timelineLoading;

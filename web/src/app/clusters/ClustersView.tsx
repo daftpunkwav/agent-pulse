@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { swrFetcher } from "@/lib/api";
+import { createSchemaFetcher } from "@/lib/api";
 import { clustersResponseSchema } from "@/lib/schemas";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/EmptyState";
 export function ClustersView() {
   const { data, error, isLoading, mutate } = useSWR(
     `/api/backend/clusters?active_only=true`,
-    async (url: string) => clustersResponseSchema.parse(await swrFetcher(url))
+    createSchemaFetcher(clustersResponseSchema)
   );
 
   return (

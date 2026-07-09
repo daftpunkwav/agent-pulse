@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { ApiError, postJson, swrFetcher } from "@/lib/api";
+import { ApiError, createSchemaFetcher, postJson } from "@/lib/api";
 import { harnessVersionsResponseSchema } from "@/lib/schemas";
 import {
   agentPathSegment,
@@ -24,8 +24,7 @@ export function HarnessView() {
     safeAgent
       ? `/api/backend/harness/${agentPathSegment(safeAgent)}/versions`
       : null,
-    async (url: string) =>
-      harnessVersionsResponseSchema.parse(await swrFetcher(url))
+    createSchemaFetcher(harnessVersionsResponseSchema)
   );
 
   const handleAgentChange = (value: string) => {

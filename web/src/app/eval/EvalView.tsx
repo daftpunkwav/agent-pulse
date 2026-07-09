@@ -10,7 +10,7 @@ import {
   Radar,
   ResponsiveContainer,
 } from "recharts";
-import { swrFetcher } from "@/lib/api";
+import { createSchemaFetcher } from "@/lib/api";
 import { evalScoresResponseSchema } from "@/lib/schemas";
 import {
   agentPathSegment,
@@ -36,8 +36,7 @@ export function EvalView() {
     safeAgent
       ? `/api/backend/eval/agents/${agentPathSegment(safeAgent)}/scores?${windowParams}`
       : null,
-    async (url: string) =>
-      evalScoresResponseSchema.parse(await swrFetcher(url))
+    createSchemaFetcher(evalScoresResponseSchema)
   );
 
   const handleAgentChange = (value: string) => {

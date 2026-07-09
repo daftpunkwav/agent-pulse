@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { Activity, DollarSign, AlertCircle, CheckCircle } from "lucide-react";
-import { swrFetcher } from "@/lib/api";
+import { createSchemaFetcher } from "@/lib/api";
 import {
   clustersResponseSchema,
   costTotalSchema,
@@ -24,10 +24,7 @@ export function OverviewView() {
     error: costError,
     isLoading: costLoading,
     mutate: mutateCost,
-  } = useSWR(
-    `/api/backend/cost/total?${window}`,
-    async (url: string) => costTotalSchema.parse(await swrFetcher(url))
-  );
+  } = useSWR(`/api/backend/cost/total?${window}`, createSchemaFetcher(costTotalSchema));
 
   const {
     data: clusters,
@@ -36,7 +33,7 @@ export function OverviewView() {
     mutate: mutateClusters,
   } = useSWR(
     `/api/backend/clusters?active_only=true`,
-    async (url: string) => clustersResponseSchema.parse(await swrFetcher(url))
+    createSchemaFetcher(clustersResponseSchema)
   );
 
   const isLoading = costLoading || clustersLoading;

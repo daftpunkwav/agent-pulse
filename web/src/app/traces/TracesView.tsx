@@ -3,7 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { Search } from "lucide-react";
-import { swrFetcher } from "@/lib/api";
+import { createSchemaFetcher } from "@/lib/api";
 import { traceResponseSchema } from "@/lib/schemas";
 import { sanitizeTraceId, tracePathSegment } from "@/lib/validation";
 import { ErrorState } from "@/components/ErrorState";
@@ -19,7 +19,7 @@ export function TracesView() {
     activeTraceId
       ? `/api/backend/traces/${tracePathSegment(activeTraceId)}`
       : null,
-    async (url: string) => traceResponseSchema.parse(await swrFetcher(url))
+    createSchemaFetcher(traceResponseSchema)
   );
 
   const handleSearch = () => {
