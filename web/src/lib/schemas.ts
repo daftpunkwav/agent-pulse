@@ -135,7 +135,10 @@ export const harnessVersionSchema = z.object({
 
 export const harnessVersionsResponseSchema = z.object({
   agent: z.string().optional(),
-  versions: z.array(harnessVersionSchema),
+  versions: z
+    .array(harnessVersionSchema)
+    .nullable()
+    .transform((v) => v ?? []),
   count: z.number().optional(),
 });
 

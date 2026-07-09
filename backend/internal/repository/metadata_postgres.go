@@ -171,6 +171,9 @@ func (r *PostgresMetadataRepo) ListHarnessVersions(ctx context.Context, agentNam
 		})
 	}
 
+	if configs == nil {
+		configs = []*domain.HarnessConfig{}
+	}
 	return configs, rows.Err()
 }
 

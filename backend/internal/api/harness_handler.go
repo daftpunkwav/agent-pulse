@@ -36,6 +36,9 @@ func (h *HarnessHandler) ListVersions(c *gin.Context) {
 		InternalErrorLog(c, h.logger, err)
 		return
 	}
+	if versions == nil {
+		versions = []*domain.HarnessConfig{}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"agent":    agentName,
