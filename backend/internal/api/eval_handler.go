@@ -28,7 +28,10 @@ func NewEvalHandler(services *service.Container, log logger.Logger) *EvalHandler
 // GET /api/v1/eval/agents/:agent_name/scores
 func (h *EvalHandler) AverageScores(c *gin.Context) {
 	agentName := c.Param("agent_name")
-	window, _ := parseWindow(c)
+	window, ok := parseWindow(c)
+	if !ok {
+		return
+	}
 
 	scores, err := h.services.EvalService.AverageScores(c.Request.Context(), agentName, window)
 	if err != nil {

@@ -27,20 +27,10 @@ func NewClusterHandler(services *service.Container, log logger.Logger) *ClusterH
 func (h *ClusterHandler) List(c *gin.Context) {
 	activeOnly := c.DefaultQuery("active_only", "true") == "true"
 
-	clusters, err := h.services.ClusterService.GetLatestClusters(c.Request.Context())
+	clusters, err := h.services.ClusterService.GetLatestClusters(c.Request.Context(), activeOnly)
 	if err != nil {
 		InternalErrorLog(c, h.logger, err)
 		return
-	}
-
-	if activeOnly {
-		filtered := clusters[:0]
-		for _, cluster := range clusters {
-			if cluster.IsActive {
-				filtered = append(filtered, cluster)
-			}
-		}
-		clusters = filtered
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -70,7 +60,6 @@ func (h *ClusterHandler) Get(c *gin.Context) {
 func (h *ClusterHandler) RunAnalysis(c *gin.Context) {
 	window, ok := parseWindow(c)
 	if !ok {
-		BadRequest(c, "from and to are required")
 		return
 	}
 

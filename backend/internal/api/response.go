@@ -30,7 +30,7 @@ func NotFound(c *gin.Context, msg string) {
 
 // Unauthorized 401 error response.
 func Unauthorized(c *gin.Context, msg string) {
-	c.JSON(http.StatusUnauthorized, gin.H{
+	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 		"error":      "unauthorized",
 		"message":    msg,
 		"request_id": c.GetString("request_id"),

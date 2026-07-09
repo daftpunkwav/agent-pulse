@@ -411,6 +411,7 @@ type MetadataRepository interface {
 	// 失败聚类
 	InsertFailureCluster(ctx context.Context, cluster *FailureCluster) error
 	ListFailureClusters(ctx context.Context, activeOnly bool) ([]*FailureCluster, error)
+	GetFailureClusterByID(ctx context.Context, id string) (*FailureCluster, error)
 }
 
 // VectorRepository 向量仓储接口（用于失败聚类）。
@@ -559,8 +560,8 @@ type FailureClusterService interface {
 	// RunAnalysis 对指定时间窗口内的失败 Trace 执行聚类分析。
 	RunAnalysis(ctx context.Context, window TimeWindow) ([]*FailureCluster, error)
 
-	// GetLatestClusters 获取最近一次聚类结果。
-	GetLatestClusters(ctx context.Context) ([]*FailureCluster, error)
+	// GetLatestClusters 获取聚类列表。
+	GetLatestClusters(ctx context.Context, activeOnly bool) ([]*FailureCluster, error)
 
 	// GetCluster 获取单个聚类详情。
 	GetCluster(ctx context.Context, id string) (*FailureCluster, error)

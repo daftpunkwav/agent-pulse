@@ -4,6 +4,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -459,4 +460,56 @@ func (r *PostgresMetadataRepo) ListFailureClusters(ctx context.Context, activeOn
 	}
 
 	return clusters, rows.Err()
+}
+
+// GetFailureClusterByID 按 ID 查询单个聚类。
+func (r *PostgresMetadataRepo) GetFailureClusterByID(ctx context.Context, id string) (*domain.FailureCluster, error) {
+	query := `SELECT
+		id::text, cluster_name, description, trace_count, percentage,
+		common_pattern, suggestion, example_traces, metadata,
+		is_active, created_at, updated_at
+	FROM failure_clusters
+	WHERE id = $1`
+
+	var (
+		clusterID, name, description, commonPattern, suggestion string
+		traceCount                                              int
+		percentage                                              float32
+		exampleTracesJSON                                       []byte
+		metadataJSON                                            []byte
+		isActive                                                bool
+		createdAt, updatedAt                                    time.Time
+	)
+
+	err := r.client.Pool().QueryRow(ctx, query, id).Scan(
+		&clusterID, &name, &description, &traceCount, &percentage,
+		&commonPattern, &suggestion, &exampleTracesJSON, &metadataJSON,
+		&isActive, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get cluster by id: %w", err)
+	}
+
+	cluster := &domain.FailureCluster{
+		ID:            clusterID,
+		Name:          name,
+		Description:   description,
+		TraceCount:    traceCount,
+		Percentage:    percentage,
+		CommonPattern: commonPattern,
+		Suggestion:    suggestion,
+		IsActive:      isActive,
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
+	}
+	if len(exampleTracesJSON) > 0 {
+		_ = json.Unmarshal(exampleTracesJSON, &cluster.ExampleTraces)
+	}
+	if len(metadataJSON) > 0 {
+		_ = json.Unmarshal(metadataJSON, &cluster.Metadata)
+	}
+	return cluster, nil
 }

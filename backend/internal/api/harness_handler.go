@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/agentpulse/backend/internal/domain"
@@ -244,9 +243,5 @@ func (h *ABTestHandler) Create(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, test)
 }
-
-// _ 防止 unused import 警告（strconv 用于 parseInt）
-var _ = strconv.Itoa
-
 
 

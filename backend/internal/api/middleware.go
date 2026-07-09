@@ -2,7 +2,6 @@
 package api
 
 import (
-	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
@@ -176,11 +175,7 @@ func AuthMiddleware(cfg *config.Config, log logger.Logger) gin.HandlerFunc {
 
 		apiKey := c.GetHeader("X-AgentPulse-Key")
 		if apiKey == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error":      "unauthorized",
-				"message":    "missing X-AgentPulse-Key header",
-				"request_id": c.GetString("request_id"),
-			})
+			Unauthorized(c, "missing X-AgentPulse-Key header")
 			return
 		}
 
@@ -199,11 +194,7 @@ func AuthMiddleware(cfg *config.Config, log logger.Logger) gin.HandlerFunc {
 				"path":       c.Request.URL.Path,
 				"request_id": c.GetString("request_id"),
 			}).Warnf("auth failed: invalid X-AgentPulse-Key")
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error":      "unauthorized",
-				"message":    "invalid API key",
-				"request_id": c.GetString("request_id"),
-			})
+			Unauthorized(c, "invalid API key")
 			return
 		}
 
@@ -246,7 +237,6 @@ type HealthPinger interface {
 // This separation is the K8s probe best practice.
 func HealthHandler(services *service.Container, log logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		_ = context.Background
 		path := c.Request.URL.Path
 
 		if path == "/healthz" {

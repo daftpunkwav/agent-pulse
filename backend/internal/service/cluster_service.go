@@ -121,23 +121,14 @@ func (s *ClusterService) groupByErrorPattern(spans []*domain.Span) []*domain.Fai
 	return clusters
 }
 
-// GetLatestClusters 获取最近一次聚类结果。
-func (s *ClusterService) GetLatestClusters(ctx context.Context) ([]*domain.FailureCluster, error) {
-	return s.metadataRepo.ListFailureClusters(ctx, true)
+// GetLatestClusters 获取聚类列表。
+func (s *ClusterService) GetLatestClusters(ctx context.Context, activeOnly bool) ([]*domain.FailureCluster, error) {
+	return s.metadataRepo.ListFailureClusters(ctx, activeOnly)
 }
 
-// GetCluster 获取单个聚类。
+// GetCluster 按 ID 获取单个聚类（含 inactive）。
 func (s *ClusterService) GetCluster(ctx context.Context, id string) (*domain.FailureCluster, error) {
-	clusters, err := s.metadataRepo.ListFailureClusters(ctx, true)
-	if err != nil {
-		return nil, err
-	}
-	for _, c := range clusters {
-		if c.ID == id {
-			return c, nil
-		}
-	}
-	return nil, nil
+	return s.metadataRepo.GetFailureClusterByID(ctx, id)
 }
 
 // ---------------------------------------------------------------------------
