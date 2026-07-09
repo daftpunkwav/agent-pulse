@@ -17,6 +17,7 @@ import {
   costTimelineResponseSchema,
 } from "@/lib/schemas";
 import { timeWindowParams } from "@/lib/validation";
+import { useChartTheme } from "@/lib/hooks/useChartTheme";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
@@ -55,6 +56,7 @@ export function CostView() {
 
   const isLoading = breakdownLoading || timelineLoading;
   const error = breakdownError ?? timelineError;
+  const chart = useChartTheme();
 
   return (
     <div>
@@ -97,12 +99,13 @@ export function CostView() {
               {timeline?.points && timeline.points.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={timeline.points}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
                     <XAxis
                       dataKey="bucket"
                       tickFormatter={(v) => new Date(v).toLocaleDateString()}
+                      tick={{ fill: chart.tick, fontSize: 12 }}
                     />
-                    <YAxis />
+                    <YAxis tick={{ fill: chart.tick, fontSize: 12 }} />
                     <Tooltip
                       labelFormatter={(v) => new Date(v).toLocaleString()}
                       formatter={(value: number) => [
@@ -113,7 +116,7 @@ export function CostView() {
                     <Line
                       type="monotone"
                       dataKey="cost_usd"
-                      stroke="#0891b2"
+                      stroke={chart.stroke}
                       strokeWidth={2}
                     />
                   </LineChart>

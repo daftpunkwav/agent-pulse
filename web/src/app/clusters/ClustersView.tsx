@@ -45,13 +45,13 @@ export function ClustersView() {
                   <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
                     Common Pattern
                   </div>
-                  <pre className="overflow-auto rounded-lg bg-slate-50 p-3 font-mono text-xs text-slate-700 ring-1 ring-slate-200/80">
+                  <pre className="code-block">
                     {c.common_pattern}
                   </pre>
                 </div>
               )}
               {c.suggestion && (
-                <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/60">
+                <div className="hint-box">
                   <strong>建议：</strong> {c.suggestion}
                 </div>
               )}

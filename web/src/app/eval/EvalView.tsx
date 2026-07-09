@@ -17,6 +17,7 @@ import {
   sanitizeAgentName,
 } from "@/lib/validation";
 import { useTimeWindow } from "@/lib/hooks/useTimeWindow";
+import { useChartTheme } from "@/lib/hooks/useChartTheme";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
@@ -28,6 +29,7 @@ export function EvalView() {
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const windowParams = useTimeWindow({ days: 7 });
+  const chart = useChartTheme();
 
   const safeAgent = sanitizeAgentName(activeAgent);
   const { data, error, isLoading, mutate } = useSWR(
@@ -100,14 +102,14 @@ export function EvalView() {
               {radarData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <RadarChart data={radarData}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey="dimension" />
-                    <PolarRadiusAxis angle={90} domain={[0, 1]} />
+                    <PolarGrid stroke={chart.grid} />
+                    <PolarAngleAxis dataKey="dimension" tick={{ fill: chart.tick, fontSize: 11 }} />
+                    <PolarRadiusAxis angle={90} domain={[0, 1]} tick={{ fill: chart.tick, fontSize: 10 }} />
                     <Radar
                       name={activeAgent}
                       dataKey="value"
-                      stroke="#0891b2"
-                      fill="#0891b2"
+                      stroke={chart.stroke}
+                      fill={chart.fill}
                       fillOpacity={0.3}
                     />
                   </RadarChart>

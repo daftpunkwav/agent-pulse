@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
-/* 确保 Tailwind 扫描所有组件 */
 @source "../**/*.{js,ts,jsx,tsx}";
+
+/* class 策略深色模式 */
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --color-pulse-400: #22d3ee;
   --color-pulse-500: #06b6d4;
   --color-pulse-600: #0891b2;
-  --color-sidebar: #0c1222;
-  --color-sidebar-border: #1e293b;
-  --color-sidebar-hover: #151d30;
   --color-surface: #f1f5f9;
+  --color-surface-dark: #0b1120;
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 }
@@ -29,28 +29,70 @@
 
   body {
     font-family: var(--font-sans);
-    color: #0f172a;
-    background: var(--color-surface);
+    @apply text-slate-900 dark:text-slate-100;
   }
 }
 
 @layer components {
-  /* 页面标题区 */
+  .bg-surface {
+    @apply bg-slate-100 dark:bg-slate-950;
+  }
+
+  /* 侧栏 */
+  .sidebar {
+    @apply relative flex w-64 shrink-0 flex-col border-r;
+    @apply border-slate-200 bg-white text-slate-600;
+    @apply dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300;
+  }
+
+  .sidebar-header {
+    @apply flex h-16 items-center gap-2.5 border-b px-6;
+    @apply border-slate-200 dark:border-slate-800;
+  }
+
+  .sidebar-logo-icon {
+    @apply flex h-9 w-9 items-center justify-center rounded-lg ring-1;
+    @apply bg-cyan-50 ring-cyan-200/80 dark:bg-cyan-500/10 dark:ring-cyan-500/30;
+  }
+
+  .sidebar-brand {
+    @apply text-base font-semibold tracking-tight text-slate-900 dark:text-white;
+  }
+
+  .sidebar-nav-link {
+    @apply group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all;
+    @apply text-slate-600 hover:bg-slate-100 hover:text-slate-900;
+    @apply dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200;
+  }
+
+  .sidebar-nav-link--active {
+    @apply bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200/60;
+    @apply dark:bg-cyan-500/10 dark:text-cyan-300 dark:ring-cyan-500/20;
+  }
+
+  .sidebar-footer {
+    @apply space-y-3 border-t px-4 py-4;
+    @apply border-slate-200 dark:border-slate-800;
+  }
+
+  /* 页面标题 */
   .page-header {
     @apply mb-8;
   }
 
   .page-title {
-    @apply text-2xl font-semibold tracking-tight text-slate-900;
+    @apply text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50;
   }
 
   .page-subtitle {
-    @apply mt-1 text-sm text-slate-500;
+    @apply mt-1 text-sm text-slate-500 dark:text-slate-400;
   }
 
   /* 卡片 */
   .card {
-    @apply rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm;
+    @apply rounded-xl border p-5 shadow-sm;
+    @apply border-slate-200/80 bg-white;
+    @apply dark:border-slate-700/60 dark:bg-slate-900/80 dark:shadow-none;
   }
 
   .card-header {
@@ -58,12 +100,14 @@
   }
 
   .card-title {
-    @apply text-sm font-semibold text-slate-800;
+    @apply text-sm font-semibold text-slate-800 dark:text-slate-200;
   }
 
   /* 指标卡 */
   .metric-card {
-    @apply relative overflow-hidden rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md;
+    @apply relative overflow-hidden rounded-xl border p-5 shadow-sm transition-shadow hover:shadow-md;
+    @apply border-slate-200/80 bg-white;
+    @apply dark:border-slate-700/60 dark:bg-slate-900/80 dark:hover:shadow-cyan-500/5;
   }
 
   .metric-card::before {
@@ -88,29 +132,45 @@
   }
 
   .metric-label {
-    @apply text-xs font-medium uppercase tracking-wide text-slate-500;
+    @apply text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400;
   }
 
   .metric-value {
-    @apply mt-2 font-mono text-2xl font-semibold tabular-nums text-slate-900;
+    @apply mt-2 font-mono text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-50;
+  }
+
+  .metric-icon-wrap {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg;
+    @apply bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300;
   }
 
   /* 按钮 */
   .btn {
-    @apply inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500;
+    @apply inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors;
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500;
   }
 
   .btn-primary {
-    @apply bg-cyan-600 text-white hover:bg-cyan-700;
+    @apply bg-cyan-600 text-white hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-500;
   }
 
   .btn-secondary {
     @apply border border-slate-200 bg-white text-slate-700 hover:bg-slate-50;
+    @apply dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700;
+  }
+
+  .btn-ghost {
+    @apply border border-slate-200/80 bg-slate-50 text-slate-600 hover:bg-slate-100;
+    @apply dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800;
   }
 
   /* 输入框 */
   .input {
-    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20;
+    @apply w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2;
+    @apply border-slate-200 bg-white text-slate-900 placeholder:text-slate-400;
+    @apply focus:border-cyan-500 focus:ring-cyan-500/20;
+    @apply dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500;
+    @apply dark:focus:border-cyan-400 dark:focus:ring-cyan-400/20;
   }
 
   /* 徽章 */
@@ -119,19 +179,19 @@
   }
 
   .badge-success {
-    @apply bg-emerald-50 text-emerald-700;
+    @apply bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400;
   }
 
   .badge-error {
-    @apply bg-red-50 text-red-700;
+    @apply bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400;
   }
 
   .badge-warn {
-    @apply bg-amber-50 text-amber-700;
+    @apply bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400;
   }
 
   .badge-info {
-    @apply bg-cyan-50 text-cyan-700;
+    @apply bg-cyan-50 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-400;
   }
 
   /* 数据表格 */
@@ -140,11 +200,11 @@
   }
 
   .data-table thead tr {
-    @apply border-b border-slate-200;
+    @apply border-b border-slate-200 dark:border-slate-700;
   }
 
   .data-table th {
-    @apply py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500;
+    @apply py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400;
   }
 
   .data-table th.text-right,
@@ -154,31 +214,46 @@
 
   .data-table tbody tr {
     @apply border-b border-slate-100 transition-colors hover:bg-slate-50/80;
+    @apply dark:border-slate-800 dark:hover:bg-slate-800/50;
   }
 
   .data-table td {
-    @apply py-2.5 text-slate-700;
+    @apply py-2.5 text-slate-700 dark:text-slate-300;
   }
 
   /* 状态块 */
   .state-box {
-    @apply rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-6 py-10 text-center;
+    @apply rounded-xl border border-dashed px-6 py-10 text-center;
+    @apply border-slate-200 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-900/40;
   }
 
   .state-box--error {
-    @apply border-red-200 bg-red-50/50;
+    @apply border-red-200 bg-red-50/50 dark:border-red-800/60 dark:bg-red-950/30;
   }
 
   .state-label {
-    @apply text-sm text-slate-500;
+    @apply text-sm text-slate-500 dark:text-slate-400;
   }
 
   .state-label--error {
-    @apply text-red-600;
+    @apply text-red-600 dark:text-red-400;
   }
 
-  /* 加载动画 */
   .pulse-dot {
-    @apply inline-block h-2 w-2 animate-pulse rounded-full bg-cyan-400;
+    @apply inline-block h-2 w-2 animate-pulse rounded-full bg-cyan-500 dark:bg-cyan-400;
+  }
+
+  /* 代码块 */
+  .code-block {
+    @apply overflow-auto rounded-lg p-3 font-mono text-xs ring-1;
+    @apply bg-slate-50 text-slate-700 ring-slate-200/80;
+    @apply dark:bg-slate-950 dark:text-slate-300 dark:ring-slate-700/80;
+  }
+
+  /* 提示块 */
+  .hint-box {
+    @apply rounded-lg px-4 py-3 text-sm ring-1;
+    @apply bg-emerald-50 text-emerald-800 ring-emerald-200/60;
+    @apply dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20;
   }
 }
