@@ -42,7 +42,6 @@ type EvalService struct {
 
 type evalJob struct {
 	span *domain.Span
-	ctx  context.Context
 }
 
 // EvalServiceConfig 评估服务配置。
@@ -129,7 +128,7 @@ func (s *EvalService) EvaluateAsync(ctx context.Context, span *domain.Span) {
 		return
 	}
 
-	job := &evalJob{span: span, ctx: ctx}
+	job := &evalJob{span: span}
 	select {
 	case s.queue <- job:
 	case <-s.closed:

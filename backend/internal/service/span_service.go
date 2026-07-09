@@ -145,24 +145,8 @@ func (s *SpanService) batchWorker(id int) {
 	defer s.workerWG.Done()
 
 	batch := make([]*domain.Span, 0, 100)
-	flushTimer := make(chan struct{})
-
-	// 定时刷新 goroutine
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				select {
-				case flushTimer <- struct{}{}:
-				default:
-				}
-			case <-s.closed:
-				return
-			}
-		}
-	}()
+	flushTick := time.NewTicker(5 * time.Second)
+	defer flushTick.Stop()
 
 	for {
 		select {
@@ -172,7 +156,7 @@ func (s *SpanService) batchWorker(id int) {
 				s.flush(id, batch)
 				batch = batch[:0]
 			}
-		case <-flushTimer:
+		case <-flushTick.C:
 			if len(batch) > 0 {
 				s.flush(id, batch)
 				batch = batch[:0]

@@ -4,7 +4,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -148,22 +147,21 @@ func (s *CostService) TotalCost(ctx context.Context, window domain.TimeWindow) (
 		return 0, 0, fmt.Errorf("clickhouse client not available")
 	}
 
-	query := `
-		SELECT
-			sum(cost_usd) AS total_cost,
-			sum(total_tokens) AS total_tokens
-		FROM agent_spans
-		WHERE timestamp >= ? AND timestamp <= ? AND span_type = 'llm'
-	`
-
 	var result struct {
 		// 用 SQL 端 toFloat64 转换,避免 clickhouse-go 的 Decimal→float64 unsupported 错误。
 		TotalCost   float64 `ch:"total_cost"`
 		TotalTokens uint64  `ch:"total_tokens"`
 	}
 
-	_ = query
-	row := s.client.Conn().QueryRow(ctx, strings.Replace(query, "sum(cost_usd)", "sum(toFloat64(cost_usd))", 1), window.From, window.To)
+	query := `
+		SELECT
+			sum(toFloat64(cost_usd)) AS total_cost,
+			sum(total_tokens) AS total_tokens
+		FROM agent_spans
+		WHERE timestamp >= ? AND timestamp <= ? AND span_type = 'llm'
+	`
+
+	row := s.client.Conn().QueryRow(ctx, query, window.From, window.To)
 	if err := row.ScanStruct(&result); err != nil {
 		return 0, 0, fmt.Errorf("query total cost: %w", err)
 	}
