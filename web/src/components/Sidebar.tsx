@@ -36,7 +36,7 @@ export function Sidebar() {
           <h1 className="sidebar-brand">
             Agent<span className="text-cyan-600 dark:text-cyan-400">Pulse</span>
           </h1>
-          <p className="text-[10px] font-medium uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          <p className="text-[10px] font-medium uppercase tracking-widest text-[color:var(--ap-fg-subtle)]">
             AgentOps
           </p>
         </div>
@@ -60,7 +60,7 @@ export function Sidebar() {
                   "h-4 w-4 shrink-0 transition-colors",
                   isActive
                     ? "text-cyan-600 dark:text-cyan-400"
-                    : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
+                    : "text-[color:var(--ap-fg-subtle)] group-hover:text-[color:var(--ap-sidebar-fg-hover)]"
                 )}
               />
               {item.name}
@@ -73,9 +73,9 @@ export function Sidebar() {
         <ThemeToggle />
         <div className="flex items-center gap-2 px-1">
           <span className="pulse-dot" />
-          <span className="text-xs text-slate-500 dark:text-slate-500">系统在线</span>
+          <span className="text-xs text-[color:var(--ap-fg-subtle)]">系统在线</span>
         </div>
-        <p className="px-1 font-mono text-[11px] text-slate-400 dark:text-slate-600">v0.1.0</p>
+        <p className="px-1 font-mono text-[11px] text-[color:var(--ap-fg-subtle)]">v0.1.0</p>
       </div>
     </aside>
   );

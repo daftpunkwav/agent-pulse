@@ -2,17 +2,98 @@
 
 @source "../**/*.{js,ts,jsx,tsx}";
 
-/* class 策略深色模式 */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --color-pulse-400: #22d3ee;
   --color-pulse-500: #06b6d4;
   --color-pulse-600: #0891b2;
-  --color-surface: #f1f5f9;
-  --color-surface-dark: #0b1120;
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+/* ===== 语义化主题令牌（浅色默认） ===== */
+:root {
+  --ap-bg: #f1f5f9;
+  --ap-fg: #0f172a;
+  --ap-fg-muted: #64748b;
+  --ap-fg-subtle: #94a3b8;
+
+  --ap-sidebar-bg: #ffffff;
+  --ap-sidebar-border: #e2e8f0;
+  --ap-sidebar-fg: #475569;
+  --ap-sidebar-fg-hover: #0f172a;
+  --ap-sidebar-hover: #f8fafc;
+  --ap-sidebar-active-bg: #ecfeff;
+  --ap-sidebar-active-fg: #0e7490;
+  --ap-sidebar-active-ring: #a5f3fc;
+
+  --ap-card-bg: #ffffff;
+  --ap-card-border: #e2e8f0;
+  --ap-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+
+  --ap-input-bg: #ffffff;
+  --ap-input-border: #e2e8f0;
+
+  --ap-state-bg: #f8fafc;
+  --ap-state-border: #e2e8f0;
+
+  --ap-table-hover: #f8fafc;
+  --ap-table-border: #f1f5f9;
+  --ap-table-head: #64748b;
+
+  --ap-code-bg: #f8fafc;
+  --ap-code-fg: #334155;
+  --ap-code-ring: #e2e8f0;
+
+  --ap-hint-bg: #ecfdf5;
+  --ap-hint-fg: #065f46;
+  --ap-hint-ring: #a7f3d0;
+
+  --ap-metric-icon-bg: #f1f5f9;
+  --ap-metric-icon-fg: #475569;
+}
+
+/* ===== 深色主题：统一冷色板，避免局部发灰/发白 ===== */
+.dark {
+  --ap-bg: #0b1120;
+  --ap-fg: #e2e8f0;
+  --ap-fg-muted: #94a3b8;
+  --ap-fg-subtle: #64748b;
+
+  --ap-sidebar-bg: #0f172a;
+  --ap-sidebar-border: #1e293b;
+  --ap-sidebar-fg: #94a3b8;
+  --ap-sidebar-fg-hover: #e2e8f0;
+  --ap-sidebar-hover: #1e293b;
+  --ap-sidebar-active-bg: rgba(6, 182, 212, 0.12);
+  --ap-sidebar-active-fg: #67e8f9;
+  --ap-sidebar-active-ring: rgba(34, 211, 238, 0.25);
+
+  --ap-card-bg: #111827;
+  --ap-card-border: #1f2937;
+  --ap-card-shadow: none;
+
+  --ap-input-bg: #1e293b;
+  --ap-input-border: #334155;
+
+  --ap-state-bg: #111827;
+  --ap-state-border: #334155;
+
+  --ap-table-hover: #1e293b;
+  --ap-table-border: #1f2937;
+  --ap-table-head: #94a3b8;
+
+  --ap-code-bg: #0f172a;
+  --ap-code-fg: #cbd5e1;
+  --ap-code-ring: #334155;
+
+  --ap-hint-bg: rgba(16, 185, 129, 0.1);
+  --ap-hint-fg: #6ee7b7;
+  --ap-hint-ring: rgba(16, 185, 129, 0.2);
+
+  --ap-metric-icon-bg: #1e293b;
+  --ap-metric-icon-fg: #94a3b8;
 }
 
 @layer base {
@@ -29,50 +110,60 @@
 
   body {
     font-family: var(--font-sans);
-    @apply text-slate-900 dark:text-slate-100;
+    color: var(--ap-fg);
+    background: var(--ap-bg);
   }
 }
 
 @layer components {
   .bg-surface {
-    @apply bg-slate-100 dark:bg-slate-950;
+    background-color: var(--ap-bg);
+    color: var(--ap-fg);
   }
 
   /* 侧栏 */
   .sidebar {
     @apply relative flex w-64 shrink-0 flex-col border-r;
-    @apply border-slate-200 bg-white text-slate-600;
-    @apply dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300;
+    background-color: var(--ap-sidebar-bg);
+    border-color: var(--ap-sidebar-border);
+    color: var(--ap-sidebar-fg);
   }
 
   .sidebar-header {
     @apply flex h-16 items-center gap-2.5 border-b px-6;
-    @apply border-slate-200 dark:border-slate-800;
+    border-color: var(--ap-sidebar-border);
   }
 
   .sidebar-logo-icon {
     @apply flex h-9 w-9 items-center justify-center rounded-lg ring-1;
-    @apply bg-cyan-50 ring-cyan-200/80 dark:bg-cyan-500/10 dark:ring-cyan-500/30;
+    background: var(--ap-sidebar-active-bg);
+    --tw-ring-color: var(--ap-sidebar-active-ring);
   }
 
   .sidebar-brand {
-    @apply text-base font-semibold tracking-tight text-slate-900 dark:text-white;
+    @apply text-base font-semibold tracking-tight;
+    color: var(--ap-fg);
   }
 
   .sidebar-nav-link {
     @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all;
-    @apply text-slate-600 hover:bg-slate-100 hover:text-slate-900;
-    @apply dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200;
+    color: var(--ap-sidebar-fg);
+  }
+
+  .sidebar-nav-link:hover {
+    background: var(--ap-sidebar-hover);
+    color: var(--ap-sidebar-fg-hover);
   }
 
   .sidebar-nav-link--active {
-    @apply bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200/60;
-    @apply dark:bg-cyan-500/10 dark:text-cyan-300 dark:ring-cyan-500/20;
+    background: var(--ap-sidebar-active-bg);
+    color: var(--ap-sidebar-active-fg);
+    box-shadow: inset 0 0 0 1px var(--ap-sidebar-active-ring);
   }
 
   .sidebar-footer {
     @apply space-y-3 border-t px-4 py-4;
-    @apply border-slate-200 dark:border-slate-800;
+    border-color: var(--ap-sidebar-border);
   }
 
   /* 页面标题 */
@@ -81,18 +172,21 @@
   }
 
   .page-title {
-    @apply text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50;
+    @apply text-2xl font-semibold tracking-tight;
+    color: var(--ap-fg);
   }
 
   .page-subtitle {
-    @apply mt-1 text-sm text-slate-500 dark:text-slate-400;
+    @apply mt-1 text-sm;
+    color: var(--ap-fg-muted);
   }
 
   /* 卡片 */
   .card {
-    @apply rounded-xl border p-5 shadow-sm;
-    @apply border-slate-200/80 bg-white;
-    @apply dark:border-slate-700/60 dark:bg-slate-900/80 dark:shadow-none;
+    @apply rounded-xl border p-5;
+    background: var(--ap-card-bg);
+    border-color: var(--ap-card-border);
+    box-shadow: var(--ap-card-shadow);
   }
 
   .card-header {
@@ -100,14 +194,20 @@
   }
 
   .card-title {
-    @apply text-sm font-semibold text-slate-800 dark:text-slate-200;
+    @apply text-sm font-semibold;
+    color: var(--ap-fg);
   }
 
   /* 指标卡 */
   .metric-card {
-    @apply relative overflow-hidden rounded-xl border p-5 shadow-sm transition-shadow hover:shadow-md;
-    @apply border-slate-200/80 bg-white;
-    @apply dark:border-slate-700/60 dark:bg-slate-900/80 dark:hover:shadow-cyan-500/5;
+    @apply relative overflow-hidden rounded-xl border p-5 transition-shadow;
+    background: var(--ap-card-bg);
+    border-color: var(--ap-card-border);
+    box-shadow: var(--ap-card-shadow);
+  }
+
+  .metric-card:hover {
+    @apply shadow-md;
   }
 
   .metric-card::before {
@@ -132,16 +232,19 @@
   }
 
   .metric-label {
-    @apply text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400;
+    @apply text-xs font-medium uppercase tracking-wide;
+    color: var(--ap-fg-muted);
   }
 
   .metric-value {
-    @apply mt-2 font-mono text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-50;
+    @apply mt-2 font-mono text-2xl font-semibold tabular-nums;
+    color: var(--ap-fg);
   }
 
   .metric-icon-wrap {
     @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg;
-    @apply bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300;
+    background: var(--ap-metric-icon-bg);
+    color: var(--ap-metric-icon-fg);
   }
 
   /* 按钮 */
@@ -151,26 +254,46 @@
   }
 
   .btn-primary {
-    @apply bg-cyan-600 text-white hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-500;
+    @apply bg-cyan-600 text-white hover:bg-cyan-700;
   }
 
   .btn-secondary {
-    @apply border border-slate-200 bg-white text-slate-700 hover:bg-slate-50;
-    @apply dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700;
+    @apply border;
+    border-color: var(--ap-input-border);
+    background: var(--ap-card-bg);
+    color: var(--ap-fg);
+  }
+
+  .btn-secondary:hover {
+    background: var(--ap-sidebar-hover);
   }
 
   .btn-ghost {
-    @apply border border-slate-200/80 bg-slate-50 text-slate-600 hover:bg-slate-100;
-    @apply dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800;
+    @apply border;
+    border-color: var(--ap-input-border);
+    background: var(--ap-state-bg);
+    color: var(--ap-sidebar-fg);
+  }
+
+  .btn-ghost:hover {
+    background: var(--ap-sidebar-hover);
+    color: var(--ap-sidebar-fg-hover);
   }
 
   /* 输入框 */
   .input {
     @apply w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2;
-    @apply border-slate-200 bg-white text-slate-900 placeholder:text-slate-400;
-    @apply focus:border-cyan-500 focus:ring-cyan-500/20;
-    @apply dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500;
-    @apply dark:focus:border-cyan-400 dark:focus:ring-cyan-400/20;
+    border-color: var(--ap-input-border);
+    background: var(--ap-input-bg);
+    color: var(--ap-fg);
+  }
+
+  .input::placeholder {
+    color: var(--ap-fg-subtle);
+  }
+
+  .input:focus {
+    @apply border-cyan-500 ring-cyan-500/20;
   }
 
   /* 徽章 */
@@ -179,19 +302,35 @@
   }
 
   .badge-success {
-    @apply bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400;
+    @apply bg-emerald-50 text-emerald-700;
+  }
+
+  .dark .badge-success {
+    @apply bg-emerald-500/15 text-emerald-400;
   }
 
   .badge-error {
-    @apply bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400;
+    @apply bg-red-50 text-red-700;
+  }
+
+  .dark .badge-error {
+    @apply bg-red-500/15 text-red-400;
   }
 
   .badge-warn {
-    @apply bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400;
+    @apply bg-amber-50 text-amber-700;
+  }
+
+  .dark .badge-warn {
+    @apply bg-amber-500/15 text-amber-400;
   }
 
   .badge-info {
-    @apply bg-cyan-50 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-400;
+    @apply bg-cyan-50 text-cyan-700;
+  }
+
+  .dark .badge-info {
+    @apply bg-cyan-500/15 text-cyan-400;
   }
 
   /* 数据表格 */
@@ -200,11 +339,12 @@
   }
 
   .data-table thead tr {
-    @apply border-b border-slate-200 dark:border-slate-700;
+    border-bottom: 1px solid var(--ap-input-border);
   }
 
   .data-table th {
-    @apply py-2.5 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400;
+    @apply py-2.5 text-left text-xs font-medium uppercase tracking-wide;
+    color: var(--ap-table-head);
   }
 
   .data-table th.text-right,
@@ -213,47 +353,62 @@
   }
 
   .data-table tbody tr {
-    @apply border-b border-slate-100 transition-colors hover:bg-slate-50/80;
-    @apply dark:border-slate-800 dark:hover:bg-slate-800/50;
+    border-bottom: 1px solid var(--ap-table-border);
+    @apply transition-colors;
+  }
+
+  .data-table tbody tr:hover {
+    background: var(--ap-table-hover);
   }
 
   .data-table td {
-    @apply py-2.5 text-slate-700 dark:text-slate-300;
+    @apply py-2.5;
+    color: var(--ap-fg-muted);
   }
 
   /* 状态块 */
   .state-box {
     @apply rounded-xl border border-dashed px-6 py-10 text-center;
-    @apply border-slate-200 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-900/40;
+    border-color: var(--ap-state-border);
+    background: var(--ap-state-bg);
   }
 
   .state-box--error {
-    @apply border-red-200 bg-red-50/50 dark:border-red-800/60 dark:bg-red-950/30;
+    @apply border-red-300 bg-red-50;
+  }
+
+  .dark .state-box--error {
+    @apply border-red-800/60 bg-red-950/30;
   }
 
   .state-label {
-    @apply text-sm text-slate-500 dark:text-slate-400;
+    @apply text-sm;
+    color: var(--ap-fg-muted);
   }
 
   .state-label--error {
-    @apply text-red-600 dark:text-red-400;
+    @apply text-red-600;
+  }
+
+  .dark .state-label--error {
+    @apply text-red-400;
   }
 
   .pulse-dot {
-    @apply inline-block h-2 w-2 animate-pulse rounded-full bg-cyan-500 dark:bg-cyan-400;
+    @apply inline-block h-2 w-2 animate-pulse rounded-full bg-cyan-500;
   }
 
-  /* 代码块 */
   .code-block {
     @apply overflow-auto rounded-lg p-3 font-mono text-xs ring-1;
-    @apply bg-slate-50 text-slate-700 ring-slate-200/80;
-    @apply dark:bg-slate-950 dark:text-slate-300 dark:ring-slate-700/80;
+    background: var(--ap-code-bg);
+    color: var(--ap-code-fg);
+    --tw-ring-color: var(--ap-code-ring);
   }
 
-  /* 提示块 */
   .hint-box {
     @apply rounded-lg px-4 py-3 text-sm ring-1;
-    @apply bg-emerald-50 text-emerald-800 ring-emerald-200/60;
-    @apply dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20;
+    background: var(--ap-hint-bg);
+    color: var(--ap-hint-fg);
+    --tw-ring-color: var(--ap-hint-ring);
   }
 }

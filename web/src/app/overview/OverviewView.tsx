@@ -96,7 +96,7 @@ export function OverviewView() {
                 <tbody>
                   {clusters.clusters.slice(0, 5).map((c) => (
                     <tr key={c.id}>
-                      <td className="font-medium text-slate-800 dark:text-slate-200">{c.name}</td>
+                      <td className="font-medium text-[color:var(--ap-fg)]">{c.name}</td>
                       <td className="text-right font-mono tabular-nums">
                         {c.trace_count}
                       </td>

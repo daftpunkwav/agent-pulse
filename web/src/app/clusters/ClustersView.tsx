@@ -39,10 +39,10 @@ export function ClustersView() {
                   </span>
                 </div>
               </div>
-              <p className="mb-4 text-sm text-slate-600">{c.description}</p>
+              <p className="mb-4 text-sm text-[color:var(--ap-fg-muted)]">{c.description}</p>
               {c.common_pattern && (
                 <div className="mb-4">
-                  <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+                  <div className="mb-2 text-xs font-medium uppercase tracking-wide text-[color:var(--ap-fg-subtle)]">
                     Common Pattern
                   </div>
                   <pre className="code-block">
