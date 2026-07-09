@@ -17,6 +17,7 @@ import {
   sanitizeAgentName,
 } from "@/lib/validation";
 import { useTimeWindow } from "@/lib/hooks/useTimeWindow";
+import { PageHeader } from "@/components/PageHeader";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
@@ -61,14 +62,11 @@ export function EvalView() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl">Evaluation</h2>
-        <p className="text-sm text-gray mt-1">LLM-as-Judge 五维评分</p>
-      </div>
+      <PageHeader title="Evaluation" subtitle="LLM-as-Judge 五维评分" />
 
       <div className="card mb-6">
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray" htmlFor="eval-agent">
+          <label className="text-sm text-slate-500" htmlFor="eval-agent">
             Agent:
           </label>
           <input
@@ -76,14 +74,11 @@ export function EvalView() {
             type="text"
             value={agentInput}
             onChange={(e) => handleAgentChange(e.target.value)}
-            className="input"
-            style={{ maxWidth: 300 }}
+            className="input max-w-xs"
           />
         </div>
         {validationError && (
-          <p className="text-sm mt-2" style={{ color: "#dc2626" }}>
-            {validationError}
-          </p>
+          <p className="mt-2 text-sm text-red-600">{validationError}</p>
         )}
       </div>
 
@@ -96,7 +91,7 @@ export function EvalView() {
       )}
 
       {!isLoading && !error && (
-        <div className="grid grid-cols-2 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">维度雷达图</h3>
@@ -111,8 +106,8 @@ export function EvalView() {
                     <Radar
                       name={activeAgent}
                       dataKey="value"
-                      stroke="#2563eb"
-                      fill="#2563eb"
+                      stroke="#0891b2"
+                      fill="#0891b2"
                       fillOpacity={0.3}
                     />
                   </RadarChart>
@@ -128,13 +123,13 @@ export function EvalView() {
               <h3 className="card-title">分维度平均分</h3>
             </div>
             {data?.scores ? (
-              <table style={{ width: "100%", fontSize: "0.875rem" }}>
+              <table className="data-table">
                 <tbody>
                   {Object.entries(data.scores).map(([key, value]) => (
-                    <tr key={key} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                      <td style={{ padding: "0.5rem 0" }}>{key}</td>
-                      <td style={{ textAlign: "right", padding: "0.5rem 0" }}>
-                        <strong>{Number(value).toFixed(3)}</strong>
+                    <tr key={key}>
+                      <td className="capitalize text-slate-600">{key.replace(/_/g, " ")}</td>
+                      <td className="text-right font-mono font-semibold tabular-nums">
+                        {Number(value).toFixed(3)}
                       </td>
                     </tr>
                   ))}

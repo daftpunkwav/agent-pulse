@@ -17,6 +17,7 @@ import {
   costTimelineResponseSchema,
 } from "@/lib/schemas";
 import { timeWindowParams } from "@/lib/validation";
+import { PageHeader } from "@/components/PageHeader";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
@@ -57,14 +58,11 @@ export function CostView() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl">Cost</h2>
-        <p className="text-sm text-gray mt-1">多维度成本归因分析</p>
-      </div>
+      <PageHeader title="Cost" subtitle="多维度成本归因分析" />
 
       <div className="card mb-6">
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray">时间窗口：</span>
+          <span className="text-sm text-slate-500">时间窗口：</span>
           {[1, 7, 30].map((d) => (
             <button
               key={d}
@@ -115,7 +113,7 @@ export function CostView() {
                     <Line
                       type="monotone"
                       dataKey="cost_usd"
-                      stroke="#2563eb"
+                      stroke="#0891b2"
                       strokeWidth={2}
                     />
                   </LineChart>
@@ -133,28 +131,26 @@ export function CostView() {
                   按 {bd.dimension} 归因 · 总计 ${bd.total_usd.toFixed(4)}
                 </h3>
               </div>
-              <table style={{ width: "100%", fontSize: "0.875rem" }}>
+              <table className="data-table">
                 <thead>
-                  <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                    <th style={{ textAlign: "left", padding: "0.5rem 0" }}>Key</th>
-                    <th style={{ textAlign: "right", padding: "0.5rem 0" }}>Cost</th>
-                    <th style={{ textAlign: "right", padding: "0.5rem 0" }}>Tokens</th>
-                    <th style={{ textAlign: "right", padding: "0.5rem 0" }}>Calls</th>
+                  <tr>
+                    <th>Key</th>
+                    <th className="text-right">Cost</th>
+                    <th className="text-right">Tokens</th>
+                    <th className="text-right">Calls</th>
                   </tr>
                 </thead>
                 <tbody>
                   {bd.items.slice(0, 10).map((item) => (
-                    <tr key={item.key} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                      <td className="text-mono" style={{ padding: "0.5rem 0" }}>
-                        {item.key}
-                      </td>
-                      <td style={{ textAlign: "right", padding: "0.5rem 0" }}>
+                    <tr key={item.key}>
+                      <td className="font-mono text-xs">{item.key}</td>
+                      <td className="text-right font-mono tabular-nums">
                         ${item.cost_usd.toFixed(4)}
                       </td>
-                      <td style={{ textAlign: "right", padding: "0.5rem 0" }}>
+                      <td className="text-right font-mono tabular-nums">
                         {item.tokens.toLocaleString()}
                       </td>
-                      <td style={{ textAlign: "right", padding: "0.5rem 0" }}>
+                      <td className="text-right font-mono tabular-nums">
                         {item.call_count}
                       </td>
                     </tr>

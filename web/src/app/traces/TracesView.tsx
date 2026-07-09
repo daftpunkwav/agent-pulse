@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import { createSchemaFetcher } from "@/lib/api";
 import { traceResponseSchema } from "@/lib/schemas";
 import { sanitizeTraceId, tracePathSegment } from "@/lib/validation";
+import { PageHeader } from "@/components/PageHeader";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
@@ -35,10 +36,7 @@ export function TracesView() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl">Traces</h2>
-        <p className="text-sm text-gray mt-1">查询 Agent 调用 Trace</p>
-      </div>
+      <PageHeader title="Traces" subtitle="查询 Agent 调用 Trace" />
 
       <div className="card mb-6">
         <div className="flex gap-2">
@@ -56,7 +54,7 @@ export function TracesView() {
           </button>
         </div>
         {validationError && (
-          <p className="text-sm mt-2" style={{ color: "#dc2626" }}>
+          <p className="mt-2 text-sm text-red-600">
             {validationError}
           </p>
         )}

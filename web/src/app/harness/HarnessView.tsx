@@ -8,6 +8,7 @@ import {
   agentPathSegment,
   sanitizeAgentName,
 } from "@/lib/validation";
+import { PageHeader } from "@/components/PageHeader";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
@@ -66,14 +67,11 @@ export function HarnessView() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl">Harness Management</h2>
-        <p className="text-sm text-gray mt-1">Agent 配置版本化与灰度发布</p>
-      </div>
+      <PageHeader title="Harness Management" subtitle="Agent 配置版本化与灰度发布" />
 
       <div className="card mb-6">
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray" htmlFor="harness-agent">
+          <label className="text-sm text-slate-500" htmlFor="harness-agent">
             Agent:
           </label>
           <input
@@ -81,14 +79,11 @@ export function HarnessView() {
             type="text"
             value={agentInput}
             onChange={(e) => handleAgentChange(e.target.value)}
-            className="input"
-            style={{ maxWidth: 300 }}
+            className="input max-w-xs"
           />
         </div>
         {validationError && (
-          <p className="text-sm mt-2" style={{ color: "#dc2626" }}>
-            {validationError}
-          </p>
+          <p className="mt-2 text-sm text-red-600">{validationError}</p>
         )}
       </div>
 
@@ -112,23 +107,21 @@ export function HarnessView() {
             <h3 className="card-title">版本列表</h3>
           </div>
           {data?.versions && data.versions.length > 0 ? (
-            <table style={{ width: "100%", fontSize: "0.875rem" }}>
+            <table className="data-table">
               <thead>
-                <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                  <th style={{ textAlign: "left", padding: "0.5rem 0" }}>Version</th>
-                  <th style={{ textAlign: "left", padding: "0.5rem 0" }}>Status</th>
-                  <th style={{ textAlign: "left", padding: "0.5rem 0" }}>Hash</th>
-                  <th style={{ textAlign: "right", padding: "0.5rem 0" }}>Traffic</th>
-                  <th style={{ textAlign: "right", padding: "0.5rem 0" }}>Action</th>
+                <tr>
+                  <th>Version</th>
+                  <th>Status</th>
+                  <th>Hash</th>
+                  <th className="text-right">Traffic</th>
+                  <th className="text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {data.versions.map((v) => (
-                  <tr key={v.version} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                    <td style={{ padding: "0.5rem 0" }}>
-                      <strong>v{v.version}</strong>
-                    </td>
-                    <td style={{ padding: "0.5rem 0" }}>
+                  <tr key={v.version}>
+                    <td className="font-semibold text-slate-800">v{v.version}</td>
+                    <td>
                       <span
                         className={`badge ${
                           v.status === "production"
@@ -141,25 +134,19 @@ export function HarnessView() {
                         {v.status}
                       </span>
                     </td>
-                    <td
-                      className="text-mono"
-                      style={{ padding: "0.5rem 0", fontSize: "0.75rem" }}
-                    >
-                      {v.config_hash
-                        ? `${v.config_hash.substring(0, 12)}...`
-                        : "—"}
+                    <td className="font-mono text-xs text-slate-500">
+                      {v.config_hash ? `${v.config_hash.substring(0, 12)}...` : "—"}
                     </td>
-                    <td style={{ textAlign: "right", padding: "0.5rem 0" }}>
+                    <td className="text-right font-mono tabular-nums">
                       {v.traffic_percent}%
                     </td>
-                    <td style={{ textAlign: "right", padding: "0.5rem 0" }}>
+                    <td className="text-right">
                       {v.status !== "production" && (
                         <button
                           type="button"
                           onClick={() => void handlePromote(v.version)}
                           disabled={promotingVersion !== null}
-                          className="btn btn-primary"
-                          style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem" }}
+                          className="btn btn-primary px-2.5 py-1 text-xs"
                         >
                           {promotingVersion === v.version ? "处理中..." : "Promote"}
                         </button>

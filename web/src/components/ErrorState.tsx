@@ -11,20 +11,10 @@ export function ErrorState({
   onRetry,
 }: ErrorStateProps) {
   return (
-    <div
-      className="card"
-      style={{ borderColor: "#fecaca", background: "#fef2f2" }}
-      role="alert"
-    >
-      <p className="text-sm" style={{ color: "#dc2626" }}>
-        {message}
-      </p>
+    <div className="state-box state-box--error" role="alert">
+      <p className="state-label state-label--error">{message}</p>
       {onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="btn btn-secondary mt-4"
-        >
+        <button type="button" onClick={onRetry} className="btn btn-secondary mt-4">
           重试
         </button>
       )}

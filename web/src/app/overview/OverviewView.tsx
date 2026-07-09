@@ -8,6 +8,8 @@ import {
   costTotalSchema,
 } from "@/lib/schemas";
 import { useTimeWindow } from "@/lib/hooks/useTimeWindow";
+import { PageHeader } from "@/components/PageHeader";
+import { MetricCard } from "@/components/MetricCard";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
@@ -37,10 +39,7 @@ export function OverviewView() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl">Overview</h2>
-        <p className="text-sm text-gray mt-1">最近 24 小时 Agent 运行总览</p>
-      </div>
+      <PageHeader title="Overview" subtitle="最近 24 小时 Agent 运行总览" />
 
       {isLoading ? (
         <LoadingState />
@@ -54,26 +53,30 @@ export function OverviewView() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-4 mb-6">
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
-              title="总成本 (24h)"
+              label="总成本 (24h)"
               value={cost ? `$${cost.total_usd.toFixed(4)}` : "—"}
-              icon={<DollarSign className="h-5 w-5 text-green-600" />}
+              variant="cost"
+              icon={<DollarSign className="h-4 w-4 text-emerald-600" />}
             />
             <MetricCard
-              title="总 Token 数"
+              label="总 Token 数"
               value={cost ? cost.total_tokens.toLocaleString() : "—"}
-              icon={<Activity className="h-5 w-5 text-blue-600" />}
+              variant="tokens"
+              icon={<Activity className="h-4 w-4 text-cyan-600" />}
             />
             <MetricCard
-              title="失败聚类"
+              label="失败聚类"
               value={clusters?.count ?? clusters?.clusters.length ?? 0}
-              icon={<AlertCircle className="h-5 w-5 text-orange-600" />}
+              variant="alert"
+              icon={<AlertCircle className="h-4 w-4 text-amber-600" />}
             />
             <MetricCard
-              title="系统状态"
+              label="系统状态"
               value="运行中"
-              icon={<CheckCircle className="h-5 w-5 text-green-600" />}
+              variant="status"
+              icon={<CheckCircle className="h-4 w-4 text-emerald-500" />}
             />
           </div>
 
@@ -82,22 +85,22 @@ export function OverviewView() {
               <h3 className="card-title">最近失败聚类</h3>
             </div>
             {clusters?.clusters && clusters.clusters.length > 0 ? (
-              <table style={{ width: "100%", fontSize: "0.875rem" }}>
+              <table className="data-table">
                 <thead>
-                  <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                    <th style={{ textAlign: "left", padding: "0.5rem 0" }}>聚类名</th>
-                    <th style={{ textAlign: "right", padding: "0.5rem 0" }}>Trace 数</th>
-                    <th style={{ textAlign: "right", padding: "0.5rem 0" }}>占比</th>
+                  <tr>
+                    <th>聚类名</th>
+                    <th className="text-right">Trace 数</th>
+                    <th className="text-right">占比</th>
                   </tr>
                 </thead>
                 <tbody>
                   {clusters.clusters.slice(0, 5).map((c) => (
-                    <tr key={c.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                      <td style={{ padding: "0.5rem 0" }}>{c.name}</td>
-                      <td style={{ textAlign: "right", padding: "0.5rem 0" }}>
+                    <tr key={c.id}>
+                      <td className="font-medium text-slate-800">{c.name}</td>
+                      <td className="text-right font-mono tabular-nums">
                         {c.trace_count}
                       </td>
-                      <td style={{ textAlign: "right", padding: "0.5rem 0" }}>
+                      <td className="text-right font-mono tabular-nums">
                         {(c.percentage * 100).toFixed(1)}%
                       </td>
                     </tr>
@@ -110,26 +113,6 @@ export function OverviewView() {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function MetricCard({
-  title,
-  value,
-  icon,
-}: {
-  title: string;
-  value: string | number;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-sm text-gray">{title}</span>
-        {icon}
-      </div>
-      <div className="text-3xl">{value}</div>
     </div>
   );
 }
