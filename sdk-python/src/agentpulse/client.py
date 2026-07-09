@@ -11,9 +11,13 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Optional
+from urllib.parse import urlparse, urlunparse
+
+from opentelemetry.trace import Tracer
 
 from opentelemetry import trace as otel_trace
 from opentelemetry.sdk.resources import Resource
@@ -22,6 +26,10 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
 logger = logging.getLogger(__name__)
+
+_OTLP_HTTP_PORT = 4318
+_OTLP_TRACES_SUFFIX = "/v1/traces"
+_API_KEY_PATTERN = re.compile(r"^ap-[a-zA-Z0-9_-]{13,}$")
 
 
 @dataclass
@@ -46,14 +54,24 @@ class ClientConfig:
 
         支持的环境变量：
         - AGENTPULSE_API_KEY
-        - AGENTPULSE_ENDPOINT
-        - AGENTPULSE_SERVICE_NAME
+        - AGENTPULSE_ENDPOINT / OTEL_EXPORTER_OTLP_ENDPOINT
+        - AGENTPULSE_SERVICE_NAME / OTEL_SERVICE_NAME
         - AGENTPULSE_ENVIRONMENT
         """
+        endpoint = (
+            os.environ.get("AGENTPULSE_ENDPOINT")
+            or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+            or "http://localhost:8080"
+        )
+        service_name = (
+            os.environ.get("AGENTPULSE_SERVICE_NAME")
+            or os.environ.get("OTEL_SERVICE_NAME")
+            or "agent-app"
+        )
         return cls(
             api_key=os.environ.get("AGENTPULSE_API_KEY", ""),
-            endpoint=os.environ.get("AGENTPULSE_ENDPOINT", "http://localhost:8080"),
-            service_name=os.environ.get("AGENTPULSE_SERVICE_NAME", "agent-app"),
+            endpoint=endpoint,
+            service_name=service_name,
             environment=os.environ.get("AGENTPULSE_ENVIRONMENT", "production"),
         )
 
@@ -75,15 +93,19 @@ class Client:
         self.config = config
         self._initialized = False
         self._tracer_provider: Optional[TracerProvider] = None
-        self._tracer = None
+        self._tracer: Optional[Tracer] = None
 
     @classmethod
     def instance(cls) -> "Client":
-        """获取全局单例（未初始化时自动创建默认实例）。"""
+        """获取全局单例。
+
+        Raises:
+            RuntimeError: 未调用 init() 初始化时抛出。
+        """
         if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls(ClientConfig())
+            raise RuntimeError(
+                "AgentPulse client not initialized; call agentpulse.init() first"
+            )
         return cls._instance
 
     @classmethod
@@ -159,33 +181,76 @@ class Client:
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("Error during AgentPulse shutdown: %s", exc)
 
-    def get_tracer(self):
+    def get_tracer(self) -> Tracer:
         """获取 OpenTelemetry Tracer。"""
         if self._tracer is None:
             self.initialize()
+        assert self._tracer is not None
         return self._tracer
 
     def _build_otlp_endpoint(self) -> str:
         """构造 OTLP HTTP endpoint URL。
 
-        默认端口为 4318（与 AgentPulse 后端配置一致）。
+        使用 urllib.parse 解析，支持 IPv6；拒绝已含 /v1/traces 的输入。
+        非 OTLP 端口（非 4318）时默认替换为 4318。
         """
-        endpoint = self.config.endpoint.rstrip("/")
-        # 如果 endpoint 没有指定端口，使用默认 OTLP HTTP 端口 4318
-        if not endpoint.endswith(":4318") and ":4317" not in endpoint:
-            # 如果只有 host:port（如 :8080），替换为 :4318
-            if ":" in endpoint.split("//")[-1]:
-                # 有端口，但可能是 8080（API 端口），不是 OTLP 端口
-                host_part = endpoint.split("//")[-1]
-                if ":" in host_part:
-                    host = host_part.rsplit(":", 1)[0]
-                    endpoint = f"{endpoint.split('://')[0]}://{host}:4318"
-            else:
-                endpoint = f"{endpoint}:4318"
-        return f"{endpoint}/v1/traces"
+        raw = self.config.endpoint.strip()
+        if not raw:
+            raise ValueError("endpoint must not be empty")
+
+        if "://" not in raw:
+            raw = f"http://{raw}"
+
+        parsed = urlparse(raw)
+        if not parsed.hostname:
+            raise ValueError(f"invalid endpoint: {self.config.endpoint!r}")
+
+        path = parsed.path or ""
+        normalized_path = path.rstrip("/")
+
+        if normalized_path.endswith(_OTLP_TRACES_SUFFIX):
+            return urlunparse(parsed._replace(path=_OTLP_TRACES_SUFFIX))
+
+        if _OTLP_TRACES_SUFFIX in normalized_path:
+            raise ValueError(
+                "endpoint must be a base URL without /v1/traces; "
+                f"got path {path!r}"
+            )
+
+        port = parsed.port
+        if port is None:
+            port = _OTLP_HTTP_PORT
+        elif port != _OTLP_HTTP_PORT:
+            port = _OTLP_HTTP_PORT
+
+        userinfo = ""
+        if parsed.username:
+            userinfo = parsed.username
+            if parsed.password:
+                userinfo += f":{parsed.password}"
+            userinfo += "@"
+
+        hostname = parsed.hostname
+        if ":" in hostname and not hostname.startswith("["):
+            hostname = f"[{hostname}]"
+
+        netloc = f"{userinfo}{hostname}:{port}"
+        new_path = f"{normalized_path}{_OTLP_TRACES_SUFFIX}" if normalized_path else _OTLP_TRACES_SUFFIX
+        return urlunparse(parsed._replace(netloc=netloc, path=new_path))
 
 
 # 全局函数式 API
+
+def _validate_api_key(api_key: str) -> None:
+    """校验 API Key 格式（非空时必须符合 ap- 前缀 + 长度要求）。"""
+    if not api_key:
+        return
+    if not _API_KEY_PATTERN.match(api_key):
+        raise ValueError(
+            "api_key must start with 'ap-' and be at least 16 characters "
+            f"(got length {len(api_key)})"
+        )
+
 
 def init(
     api_key: str = "",
@@ -194,7 +259,10 @@ def init(
     environment: str = "production",
     sample_rate: float = 1.0,
     flush_interval_seconds: float = 5.0,
+    max_queue_size: int = 2048,
     headers: Optional[dict[str, str]] = None,
+    resource_attributes: Optional[dict[str, str]] = None,
+    **kwargs: Any,
 ) -> Client:
     """初始化 AgentPulse 客户端（全局）。
 
@@ -208,10 +276,17 @@ def init(
         sample_rate: 采样率，0-1 之间。
         flush_interval_seconds: 批量上报间隔。
         headers: 自定义 HTTP headers。
+        max_queue_size: Span 队列最大长度。
+        resource_attributes: 附加 OTel 资源属性。
+        **kwargs: 保留给未来扩展，当前忽略未知键。
 
     Returns:
         初始化后的 Client 实例。
     """
+    _validate_api_key(api_key)
+    if kwargs:
+        logger.debug("init() received unused kwargs: %s", list(kwargs.keys()))
+
     config = ClientConfig(
         api_key=api_key,
         endpoint=endpoint,
@@ -219,7 +294,9 @@ def init(
         environment=environment,
         sample_rate=sample_rate,
         flush_interval_seconds=flush_interval_seconds,
+        max_queue_size=max_queue_size,
         headers=headers or {},
+        resource_attributes=resource_attributes or {},
     )
     client = Client(config)
     client.initialize()
@@ -230,12 +307,16 @@ def init(
 def get_client() -> Client:
     """获取全局客户端实例。
 
-    若未初始化则使用默认配置创建。
+    Raises:
+        RuntimeError: 未调用 init() 初始化时抛出。
     """
     return Client.instance()
 
 
 def shutdown() -> None:
     """关闭全局客户端，刷新所有缓冲 Span。"""
-    client = Client.instance()
-    client.shutdown()
+    if Client._instance is None:
+        return
+    Client._instance.shutdown()
+    with Client._lock:
+        Client._instance = None
