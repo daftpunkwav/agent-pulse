@@ -21,13 +21,14 @@ import (
 //   - 调用 LLM-as-Judge 打分
 //   - 持久化评估结果
 type EvalService struct {
-	evalRepo  domain.EvaluationRepository
-	spanRepo  domain.SpanRepository
-	logger    logger.Logger
+	evalRepo   domain.EvaluationRepository
+	spanRepo   domain.SpanRepository
+	logger     logger.Logger
 
 	// LLM 客户端
 	judgeClient *openai.Client
 	judgeModel  string
+	evalTimeout time.Duration
 
 	// 采样配置
 	sampleRate float32
@@ -49,6 +50,7 @@ type EvalServiceConfig struct {
 	Model       string
 	APIKey      string
 	BaseURL     string
+	Timeout     time.Duration
 	SampleRate  float32
 	Workers     int
 	QueueSize   int
@@ -73,15 +75,19 @@ func NewEvalService(
 	if cfg.QueueSize <= 0 {
 		cfg.QueueSize = 1000
 	}
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = 60 * time.Second
+	}
 
 	s := &EvalService{
-		evalRepo:   evalRepo,
-		spanRepo:   spanRepo,
-		logger:     log.WithFields(map[string]any{"component": "eval_service"}),
-		judgeModel: cfg.Model,
-		sampleRate: cfg.SampleRate,
-		queue:      make(chan *evalJob, cfg.QueueSize),
-		closed:     make(chan struct{}),
+		evalRepo:    evalRepo,
+		spanRepo:    spanRepo,
+		logger:      log.WithFields(map[string]any{"component": "eval_service"}),
+		judgeModel:  cfg.Model,
+		evalTimeout: cfg.Timeout,
+		sampleRate:  cfg.SampleRate,
+		queue:       make(chan *evalJob, cfg.QueueSize),
+		closed:      make(chan struct{}),
 	}
 
 	if cfg.APIKey != "" {
@@ -162,7 +168,7 @@ func (s *EvalService) evalWorker(id int) {
 	for {
 		select {
 		case job := <-s.queue:
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), s.evalTimeout)
 			eval, err := s.evaluate(ctx, job.span)
 			cancel()
 			if err != nil {

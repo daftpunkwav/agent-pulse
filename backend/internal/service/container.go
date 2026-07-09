@@ -60,6 +60,7 @@ func NewContainer(repos *repository.Container, cfg *config.Config, log logger.Lo
 		Model:      cfg.Judge.Model,
 		APIKey:     cfg.Judge.APIKey,
 		BaseURL:    cfg.Judge.BaseURL,
+		Timeout:    cfg.Judge.Timeout,
 		SampleRate: float32(cfg.Evaluation.SampleRate),
 		Workers:    cfg.Evaluation.AsyncWorkers,
 		QueueSize:  cfg.Evaluation.AsyncQueueSize,
