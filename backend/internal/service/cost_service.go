@@ -6,40 +6,50 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/agentpulse/backend/internal/domain"
-	"github.com/agentpulse/backend/internal/repository"
 	"github.com/agentpulse/backend/pkg/logger"
 )
 
 // CostService 五维成本归因服务。
 //
 // 五个归因维度：用户、会话、Agent、工具、推理步骤、模型
+//
+// 设计改进(v0.2.0):
+//   - 通过 domain.ClickHouseQueryExecutor 接口接收查询能力，
+//     不再依赖 repository.ClickHouseSpanRepo 具体类型
 type CostService struct {
-	client      *repository.ClickHouseClient
-	spanRepo    domain.SpanRepository
-	pricingRepo domain.PricingRepository
-	logger      logger.Logger
+	queryExecutor domain.ClickHouseQueryExecutor
+	spanRepo      domain.SpanRepository
+	pricingRepo   domain.PricingRepository
+	logger        logger.Logger
 }
 
 // NewCostService 创建服务实例。
+//
+// queryExecutor 提供 ClickHouse 查询能力（可为 nil，此时归因查询返回错误）。
+// nil 场景用于测试：传入 mock executor 验证业务逻辑。
 func NewCostService(
+	queryExecutor domain.ClickHouseQueryExecutor,
 	spanRepo domain.SpanRepository,
 	pricingRepo domain.PricingRepository,
 	log logger.Logger,
 ) *CostService {
 	s := &CostService{
-		spanRepo:    spanRepo,
-		pricingRepo: pricingRepo,
-		logger:      log.WithFields(map[string]any{"component": "cost_service"}),
+		queryExecutor: queryExecutor,
+		spanRepo:      spanRepo,
+		pricingRepo:   pricingRepo,
+		logger:        log.WithFields(map[string]any{"component": "cost_service"}),
 	}
-
-	// 提取 ClickHouse 客户端（如果是 ClickHouse 后端）
-	if chRepo, ok := spanRepo.(*repository.ClickHouseSpanRepo); ok {
-		s.client = chRepo.Client()
-	}
-
 	return s
+}
+
+// Assert CostService 始终有非 nil queryExecutor（非测试场景）。
+// 测试场景通过 NewCostService(nil, ...) 注入 mock。
+func (s *CostService) assertQueryExecutor() error {
+	if s.queryExecutor == nil {
+		return fmt.Errorf("clickhouse query executor not available")
+	}
+	return nil
 }
 
 // Breakdown 按指定维度归因成本。
@@ -51,6 +61,10 @@ func (s *CostService) Breakdown(
 	dimensions []domain.CostDimension,
 	limit int,
 ) ([]*domain.CostBreakdown, error) {
+	if err := s.assertQueryExecutor(); err != nil {
+		return nil, err
+	}
+
 	if len(dimensions) == 0 {
 		dimensions = domain.AllCostDimensions()
 	}
@@ -77,8 +91,8 @@ func (s *CostService) breakdownOne(
 	window domain.TimeWindow,
 	limit int,
 ) (*domain.CostBreakdown, error) {
-	if s.client == nil {
-		return nil, fmt.Errorf("clickhouse client not available")
+	if err := s.assertQueryExecutor(); err != nil {
+		return nil, err
 	}
 
 	dimCol, whereExtra, spanType, err := dimensionConfig(dim)
@@ -110,7 +124,7 @@ func (s *CostService) breakdownOne(
 	var totalCost float64
 	var totalTokens uint64
 
-	err = s.client.QueryRows(ctx, query, func(rows driver.Rows) error {
+	err = s.queryExecutor.QueryRows(ctx, query, func(rows domain.Rows) error {
 		var (
 			key       string
 			costUSD   float64
@@ -143,12 +157,11 @@ func (s *CostService) breakdownOne(
 
 // TotalCost 查询时间窗口内总成本。
 func (s *CostService) TotalCost(ctx context.Context, window domain.TimeWindow) (float64, uint64, error) {
-	if s.client == nil {
-		return 0, 0, fmt.Errorf("clickhouse client not available")
+	if err := s.assertQueryExecutor(); err != nil {
+		return 0, 0, err
 	}
 
 	var result struct {
-		// 用 SQL 端 toFloat64 转换,避免 clickhouse-go 的 Decimal→float64 unsupported 错误。
 		TotalCost   float64 `ch:"total_cost"`
 		TotalTokens uint64  `ch:"total_tokens"`
 	}
@@ -161,8 +174,11 @@ func (s *CostService) TotalCost(ctx context.Context, window domain.TimeWindow) (
 		WHERE timestamp >= ? AND timestamp <= ? AND span_type = 'llm'
 	`
 
-	row := s.client.Conn().QueryRow(ctx, query, window.From, window.To)
-	if err := row.ScanStruct(&result); err != nil {
+	err := s.queryExecutor.QueryRow(ctx, query, func(row domain.Row) error {
+		return row.Scan(&result.TotalCost, &result.TotalTokens)
+	}, window.From, window.To)
+
+	if err != nil {
 		return 0, 0, fmt.Errorf("query total cost: %w", err)
 	}
 
@@ -175,8 +191,8 @@ func (s *CostService) Timeline(
 	window domain.TimeWindow,
 	granularity string,
 ) ([]TimelinePoint, error) {
-	if s.client == nil {
-		return nil, fmt.Errorf("clickhouse client not available")
+	if err := s.assertQueryExecutor(); err != nil {
+		return nil, err
 	}
 
 	var trunc string
@@ -201,22 +217,22 @@ func (s *CostService) Timeline(
 		ORDER BY bucket ASC
 	`, trunc)
 
-	rows, err := s.client.Conn().Query(ctx, query, window.From, window.To)
+	points := make([]TimelinePoint, 0)
+
+	err := s.queryExecutor.QueryRows(ctx, query, func(rows domain.Rows) error {
+		var point TimelinePoint
+		if err := rows.Scan(&point.Bucket, &point.CostUSD, &point.Tokens, &point.CallCount); err != nil {
+			return err
+		}
+		points = append(points, point)
+		return nil
+	}, window.From, window.To)
+
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var points []TimelinePoint
-	for rows.Next() {
-		var point TimelinePoint
-		if err := rows.ScanStruct(&point); err != nil {
-			return nil, err
-		}
-		points = append(points, point)
-	}
-
-	return points, rows.Err()
+	return points, nil
 }
 
 // TimelinePoint 时间序列数据点。

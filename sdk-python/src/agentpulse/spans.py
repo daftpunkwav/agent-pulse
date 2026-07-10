@@ -76,10 +76,15 @@ class Session:
             "ap.user_id": self.user_id,
             "ap.agent_name": self.agent_name,
         }
-        # 合并 metadata
+        # 合并 metadata，保留原生数值类型
         for key, value in self.metadata.items():
             attr_key = f"ap.session.metadata.{key}"
-            attrs[attr_key] = str(value)
+            if isinstance(value, (bool, int, float, str)):
+                attrs[attr_key] = value
+            elif isinstance(value, (list, tuple)):
+                attrs[attr_key] = [str(v) for v in value]
+            else:
+                attrs[attr_key] = str(value)
         return attrs
 
     def __enter__(self) -> "Session":
@@ -280,7 +285,10 @@ def _set_ap_attribute(otel_span: Span, key: str, value: Any) -> None:
     elif isinstance(value, (list, tuple)):
         otel_span.set_attribute(attr_key, [str(v) for v in value])
     else:
-        otel_span.set_attribute(attr_key, str(value))
+        raise TypeError(
+            f"unsupported attribute type {type(value).__name__} for key={attr_key}; "
+            "supported: bool, int, float, str, list, tuple"
+        )
 
 
 @contextlib.contextmanager

@@ -33,6 +33,7 @@ type Config struct {
 	Judge       JudgeConfig       `mapstructure:"judge" validate:"required"`
 	OTLP        OTLPConfig        `mapstructure:"otlp" validate:"required"`
 	Evaluation  EvaluationConfig  `mapstructure:"evaluation"`
+	RateLimit   *RateLimitConfig  `mapstructure:"rate_limit"`
 }
 
 // AuthConfig 鉴权配置。
@@ -209,6 +210,16 @@ type EvaluationConfig struct {
 	CacheTTL          time.Duration `mapstructure:"cache_ttl"`
 }
 
+// RateLimitConfig 限流配置。
+type RateLimitConfig struct {
+	// Enabled 是否启用限流。生产环境建议 true。
+	Enabled bool  `mapstructure:"enabled"`
+	// Rate 每秒允许请求数。
+	Rate float64 `mapstructure:"rate" validate:"min=0.1"`
+	// Burst 突发请求配额。
+	Burst int `mapstructure:"burst" validate:"min=1"`
+}
+
 // Load 从指定目录加载配置。
 //
 // 查找规则：
@@ -325,6 +336,11 @@ func setDefaults(v *viper.Viper) {
 		"reasoning_depth", "helpfulness",
 	})
 	v.SetDefault("evaluation.cache_ttl", "24h")
+
+	// RateLimit
+	v.SetDefault("rate_limit.enabled", true)
+	v.SetDefault("rate_limit.rate", 10.0)
+	v.SetDefault("rate_limit.burst", 20)
 }
 
 func validate(cfg *Config) error {

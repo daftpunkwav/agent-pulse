@@ -679,3 +679,54 @@ func IsValidCostDimension(d CostDimension) bool {
 	return ok
 }
 
+// ============================================================================
+// ClickHouse Query Executor Interface
+// ============================================================================
+//
+// CostService 等业务层依赖此接口执行 ClickHouse 查询，
+// 避免直接 import clickhouse-go 驱动，实现仓储层与业务层解耦。
+// 实现方: repository.ClickHouseClient（已实现 QueryRows / QueryRow / Conn）
+
+// ClickHouseQueryExecutor 抽象 ClickHouse 查询执行能力。
+//
+// 设计原则：
+//   - 接口由使用方 (CostService) 定义，符合"接口由使用方定义"原则
+//   - 不引入 clickhouse-go driver 依赖（回调模式替代 driver.Rows）
+//   - QueryRow 通过回调返回单行结果，保持与 QueryRows 一致的错误处理
+type ClickHouseQueryExecutor interface {
+	// QueryRows 查询多行，scanFn 处理每行数据。
+	// rows.Err() 在迭代完成后检查。
+	QueryRows(ctx context.Context, query string, scanFn func(rows Rows) error, args ...any) error
+
+	// QueryRow 查询单行，scanFn 处理结果行。
+	QueryRow(ctx context.Context, query string, scanFn func(row Row) error, args ...any) error
+
+	// Conn 返回底层连接（用于 Exec 等原生操作）。
+	Conn() Conn
+}
+
+// Rows 抽象数据库行迭代器，避免 domain 包依赖 clickhouse-go driver。
+type Rows interface {
+	// Next 推进到下一行，返回 false 表示无更多行或出错。
+	Next() bool
+	// Scan 将当前行扫描到目标变量。
+	Scan(dest ...any) error
+	// Err 返回迭代过程中的错误（需在 Next() 返回 false 后调用）。
+	Err() error
+	// Close 释放行资源。
+	Close() error
+}
+
+// Row 抽象单行结果。
+type Row interface {
+	// Scan 将行扫描到目标变量。
+	Scan(dest ...any) error
+}
+
+// Conn 抽象底层数据库连接。
+type Conn interface {
+	// Exec 执行无返回结果的 SQL。
+	Exec(ctx context.Context, query string, args ...any) error
+}
+
+

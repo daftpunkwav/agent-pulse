@@ -12,31 +12,34 @@ import (
 //
 // 持有所有 Repository 实例，Service 层通过此容器访问。
 type Container struct {
-	Span       domain.SpanRepository
-	Evaluation domain.EvaluationRepository
-	Pricing    domain.PricingRepository
-	Metadata   domain.MetadataRepository
-	Vector     domain.VectorRepository // 可选
+	Span             domain.SpanRepository
+	Evaluation       domain.EvaluationRepository
+	Pricing          domain.PricingRepository
+	Metadata         domain.MetadataRepository
+	Vector           domain.VectorRepository // 可选
+	ClickHouseExecutor domain.ClickHouseQueryExecutor // ClickHouse 查询执行器（CostService 使用）
 }
 
 // ContainerDeps 仓储依赖。
 //
 // 显式声明，便于测试时只注入需要的 mock。
 type ContainerDeps struct {
-	Span       domain.SpanRepository
-	Evaluation domain.EvaluationRepository
-	Pricing    domain.PricingRepository
-	Metadata   domain.MetadataRepository
-	Vector     domain.VectorRepository
+	Span             domain.SpanRepository
+	Evaluation       domain.EvaluationRepository
+	Pricing          domain.PricingRepository
+	Metadata         domain.MetadataRepository
+	Vector           domain.VectorRepository
+	ClickHouseExecutor domain.ClickHouseQueryExecutor
 }
 
 // NewContainer 创建仓储容器。
 func NewContainer(deps ContainerDeps) *Container {
 	return &Container{
-		Span:       deps.Span,
-		Evaluation: deps.Evaluation,
-		Pricing:    deps.Pricing,
-		Metadata:   deps.Metadata,
-		Vector:     deps.Vector,
+		Span:             deps.Span,
+		Evaluation:       deps.Evaluation,
+		Pricing:          deps.Pricing,
+		Metadata:         deps.Metadata,
+		Vector:           deps.Vector,
+		ClickHouseExecutor: deps.ClickHouseExecutor,
 	}
 }

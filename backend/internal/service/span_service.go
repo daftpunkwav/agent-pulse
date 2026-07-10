@@ -114,7 +114,7 @@ func (s *SpanService) fillMissingCost(ctx context.Context, spans []*domain.Span)
 	// 一次性查询价格
 	for model, ss := range byModel {
 		pricing, err := s.pricingRepo.Get(ctx, model, ss[0].StartTime)
-		if err != nil {
+		if err != nil || pricing == nil {
 			s.logger.Warnf("get pricing for %s: %v", model, err)
 			continue
 		}

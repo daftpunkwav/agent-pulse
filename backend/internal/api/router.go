@@ -36,6 +36,7 @@ func NewRouter(cfg *config.Config, services *service.Container, log logger.Logge
 	// API v1
 	v1 := r.Group("/api/v1")
 	v1.Use(AuthMiddleware(cfg, log))
+	v1.Use(RateLimitMiddleware(cfg, log))
 	{
 		// Trace
 		traceHandler := NewTraceHandler(services, log)

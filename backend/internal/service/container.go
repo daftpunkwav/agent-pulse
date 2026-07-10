@@ -54,7 +54,7 @@ func NewContainer(repos *repository.Container, cfg *config.Config, log logger.Lo
 	}
 
 	c.SpanService = NewSpanService(repos.Span, repos.Pricing, log)
-	c.CostService = NewCostService(repos.Span, repos.Pricing, log)
+	c.CostService = NewCostService(repos.ClickHouseExecutor, repos.Span, repos.Pricing, log)
 
 	evalCfg := EvalServiceConfig{
 		Model:      cfg.Judge.Model,
