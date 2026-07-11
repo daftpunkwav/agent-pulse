@@ -17,6 +17,9 @@ import (
 	"sync"
 	"time"
 
+	collectorpb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	"google.golang.org/grpc"
+
 	"github.com/agentpulse/backend/internal/api"
 	"github.com/agentpulse/backend/internal/collector"
 	"github.com/agentpulse/backend/internal/config"
@@ -40,6 +43,7 @@ type Application struct {
 
 	apiServer  *http.Server
 	otlpServer *http.Server
+	grpcServer *grpc.Server
 
 	shutdownFns []ShutdownFunc
 	mu          sync.Mutex
@@ -131,12 +135,16 @@ func (a *Application) initRepositories() *repository.Container {
 		vectorRepo = repository.NewChromaVectorRepo(a.chroma, a.log)
 	}
 
+	// ClickHouse 查询执行器：解耦 CostService 与具体仓储类型。
+	clickHouseExecutor := repository.NewClickHouseQueryExecutorAdapter(clickhouseRepo.Client())
+
 	return repository.NewContainer(repository.ContainerDeps{
-		Span:       clickhouseRepo,
-		Metadata:   postgresRepo,
-		Evaluation: evalRepo,
-		Pricing:    pricingRepo,
-		Vector:     vectorRepo,
+		Span:              clickhouseRepo,
+		Metadata:          postgresRepo,
+		Evaluation:        evalRepo,
+		Pricing:           pricingRepo,
+		Vector:            vectorRepo,
+		ClickHouseExecutor: clickHouseExecutor,
 	})
 }
 
@@ -160,13 +168,19 @@ func (a *Application) initHTTPServers() error {
 		IdleTimeout:       120 * time.Second,
 	}
 
+	// gRPC OTLP 接收器（标准 OTLP/gRPC 协议）
+	grpcHandler := collector.NewGRPCHandler(a.cfg, a.services, a.log)
+	a.grpcServer = grpc.NewServer()
+	collectorpb.RegisterTraceServiceServer(a.grpcServer, grpcHandler)
+	a.log.Infof("gRPC OTLP receiver configured on :%d", a.cfg.OTLP.GRPCPort)
+
 	return nil
 }
 
-// Serve starts all HTTP servers and blocks until either server errors or
+// Serve starts all HTTP/gRPC servers and blocks until either server errors or
 // ctx is cancelled.
 func (a *Application) Serve(ctx context.Context) error {
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 
 	go func() {
 		a.log.Infof("API server listening on %s", a.apiServer.Addr)
@@ -179,6 +193,19 @@ func (a *Application) Serve(ctx context.Context) error {
 		a.log.Infof("OTLP HTTP receiver listening on %s", a.otlpServer.Addr)
 		if err := a.otlpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("otlp server: %w", err)
+		}
+	}()
+
+	go func() {
+		grpcAddr := fmt.Sprintf(":%d", a.cfg.OTLP.GRPCPort)
+		a.log.Infof("OTLP gRPC receiver listening on %s", grpcAddr)
+		listener, err := net.Listen("tcp", grpcAddr)
+		if err != nil {
+			errCh <- fmt.Errorf("grpc listen: %w", err)
+			return
+		}
+		if err := a.grpcServer.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			errCh <- fmt.Errorf("grpc server: %w", err)
 		}
 	}()
 
@@ -238,6 +265,11 @@ func (a *Application) shutdownHTTP(ctx context.Context) error {
 				firstErr = fmt.Errorf("otlp shutdown: %w", err)
 			}
 		}
+	}
+
+	if a.grpcServer != nil {
+		a.grpcServer.GracefulStop()
+		a.log.Infof("gRPC server stopped gracefully")
 	}
 
 	return firstErr

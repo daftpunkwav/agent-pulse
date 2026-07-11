@@ -6,12 +6,19 @@
 
 ```
 deploy/
-├── docker-compose.yml             # 本地开发依赖（ClickHouse/PG/Chroma）
+├── docker/                         # Dockerfile（多阶段构建）
+│   ├── backend.Dockerfile          # Go 后端镜像（distroless）
+│   └── web.Dockerfile              # Next.js 前端镜像（standalone）
 ├── init/
-│   ├── clickhouse/01-init.sql     # ClickHouse 表结构与初始化
-│   └── postgres/01-init.sql       # PostgreSQL 表结构与初始化数据
-└── README.md                      # 本文件
+│   ├── clickhouse/01-init.sql      # ClickHouse 表结构与初始化
+│   └── postgres/01-init.sql        # PostgreSQL 表结构与初始化数据
+├── k8s/                            # Kubernetes  manifests
+│   ├── base/                       # 基础资源（Deployment/Service/StatefulSet/Ingress/NetworkPolicy）
+│   └── overlays/production/        # 生产环境 overlay（扩缩容）
+└── README.md                       # 本文件
 ```
+
+> **注意**: 本目录不含 `docker-compose.yml`。本地开发使用根目录的 Docker Compose 配置（如有），或手动启动各服务。
 
 ## 启动本地基础设施
 
@@ -42,6 +49,10 @@ docker compose down -v
 | ClickHouse | 8123 | HTTP interface（调试） |
 | PostgreSQL | 5432 | 元数据存储 |
 | Chroma | 8000 | 向量存储 |
+| AgentPulse 后端 | 8080 | REST API |
+| AgentPulse 后端 | 4318 | OTLP HTTP |
+| AgentPulse 后端 | 4317 | OTLP gRPC |
+| Next.js 前端 | 3000 | Web Dashboard |
 
 ## 数据保留策略
 
@@ -55,6 +66,46 @@ docker compose down -v
 
 修改 TTL：编辑 `init/clickhouse/01-init.sql` 中的 `INTERVAL 90 DAY` 等。
 
+## Docker 镜像
+
+### 后端镜像 (`docker/backend.Dockerfile`)
+
+多阶段构建：
+- **Stage 1 (builder)**: `golang:1.25-alpine`，编译 `./cmd/server`，CGO_ENABLED=0
+- **Stage 2 (runtime)**: `gcr.io/distroless/static-debian12:nonroot`，非 root 用户运行
+- 暴露端口：`8080`（REST API）、`4318`（OTLP HTTP）、`4317`（OTLP gRPC）
+
+### 前端镜像 (`docker/web.Dockerfile`)
+
+三阶段构建：
+- **deps**: `node:20-alpine`，安装依赖
+- **builder**: `node:20-alpine`，构建 Next.js standalone 输出
+- **runner**: `node:20-alpine`，`nextjs` 用户（UID 1001）运行
+- 暴露端口：`3000`
+
+## Kubernetes 部署
+
+`k8s/base/` 包含完整 K8s 资源清单：
+
+| 资源 | 说明 |
+|------|------|
+| `backend.yaml` | Deployment + Service（1 副本，100m-1 CPU / 256-512Mi） |
+| `web.yaml` | Deployment + Service（1 副本，50-500m CPU / 128-256Mi） |
+| `postgres.yaml` | StatefulSet + Service（5Gi PVC） |
+| `clickhouse.yaml` | StatefulSet + Service（20Gi PVC） |
+| `chroma.yaml` | Deployment + Service（持久化存储） |
+| `ingress.yaml` | Nginx Ingress（`/` → web:3000, `/api` → backend:8080） |
+| `networkpolicy.yaml` | Default-deny + 仅允许 `agentpulse` 和 `ingress-nginx` 命名空间 |
+
+**生产扩缩容**: `k8s/overlays/production/` 将 backend 和 web 各扩至 2 副本。
+
+应用方式：
+```bash
+kubectl apply -k k8s/base
+# 或生产环境
+kubectl apply -k k8s/overlays/production
+```
+
 ## 生产部署
 
 生产环境建议：
@@ -66,7 +117,7 @@ docker compose down -v
 - **负载均衡**：Nginx/Traefik 代理 API
 - **HTTPS**：Let's Encrypt 自动证书
 
-K8s manifests 后续在 `deploy/k8s/` 目录下提供。
+K8s manifests 见 `deploy/k8s/base/`，生产扩缩容见 `deploy/k8s/overlays/production/`。
 
 ## 添加新依赖
 

@@ -4,6 +4,8 @@ Python SDK for AgentPulse — observability and operations for LLM Agents.
 
 通过 OpenTelemetry 协议将 Agent 调用 Trace 上报到 AgentPulse 后端。
 
+**版本**: 0.1.0 | **要求**: Python >= 3.11
+
 ## 安装
 
 ```bash
@@ -153,10 +155,12 @@ def observe(
     agent_name: str = "",
     span_type: str = "agent",
     name: Optional[str] = None,
-    capture_args: bool = True,
+    capture_args: bool = False,   # 默认关闭，防止 PII 泄露
     capture_result: bool = True,
 ) -> Callable
 ```
+
+> **安全提示**: `capture_args=False` 可防止函数参数中的密码、token 等敏感信息进入 Trace。仅在调试需要时开启。
 
 ### `session()`
 

@@ -6,6 +6,8 @@
 
 公共响应头：`X-Request-ID`
 
+认证：`/api/v1/*` 端点需要 `X-AgentPulse-Key` 头（当 `AGENTPULSE_AUTH_ENABLED=true` 时）。`/healthz` 和 `/readyz` 无需认证。
+
 ## 1. Trace API
 
 ### GET /traces/:trace_id
@@ -302,13 +304,23 @@ OpenTelemetry OTLP/HTTP 接收端点。
 - Content-Type: `application/x-protobuf`
 - 协议: [OTLP Trace Export](https://opentelemetry.io/docs/specs/otlp/#trace-export)
 - 兼容: 所有 OpenTelemetry 官方 SDK
-- 鉴权: `X-AgentPulse-Key` 头(必须,与 API Key 同一组)
-- Body 限制: 默认 10MB,可通过 `AGENTPULSE_OTLP_MAX_BODY_SIZE` 调整
+- 鉴权: `X-AgentPulse-Key` 头（默认开启，可通过 `AGENTPULSE_AUTH_OTLP_REQUIRE_KEY` 关闭）
+- Body 限制: 默认 10MB，可通过 `AGENTPULSE_OTLP_MAX_BODY_SIZE` 调整
 - 超时: ReadHeader 5s / Read 30s / Write 30s
+- 响应: 返回 `ExportTraceServicePartialSuccess`，包含被拒绝的样本数和错误信息
 
 支持 OTel GenAI 语义约定属性 + AgentPulse 自定义属性(`ap.*`)。
 
-> **gRPC 接收 (端口 4317)**: 当前版本未实现,配置项保留为 Phase 2 扩展。
+### gRPC Export  (端口 4317)
+
+OpenTelemetry OTLP/gRPC 接收端点。
+
+- 服务: `opentelemetry.proto.collector.trace.v1.TraceService/Export`
+- 协议: [OTLP gRPC](https://opentelemetry.io/docs/specs/otlp/#otlp-grpc)
+- 鉴权: `x-agentpulse-key` metadata（默认开启）
+- 超时: 与 HTTP 一致
+
+配置项：`AGENTPULSE_OTLP_GRPC_PORT`（默认 4317）、`AGENTPULSE_OTLP_HTTP_PORT`（默认 4318）。
 
 ## 8. 健康检查
 
@@ -354,7 +366,7 @@ OpenTelemetry OTLP/HTTP 接收端点。
 
 ```json
 {
-  "error": "internal_error",
+  "error": "internal_server_error",
   "message": "an internal error occurred, please retry with the request_id for support",
   "request_id": "uuid"
 }
@@ -362,18 +374,24 @@ OpenTelemetry OTLP/HTTP 接收端点。
 
 错误码：
 - `400 bad_request` — 参数错误
-- `401 unauthorized` — 鉴权失败(MVP 已启用,`X-AgentPulse-Key` 缺失或无效)
+- `401 unauthorized` — 鉴权失败（`X-AgentPulse-Key` 缺失或无效）
 - `404 not_found` — 资源不存在
 - `405 method_not_allowed` — 方法不允许
-- `413 payload_too_large` — Body 超过限制
-- `500 internal_error` — 服务内部错误(详细错误仅写日志,客户端只见通用消息 + request_id)
-- `503 service_unavailable` — 依赖不可用(如 ClickHouse/Postgres 离线)
+- `413 payload_too_large` — Body 超过限制（默认 10MB）
+- `429 rate_limit_exceeded` — 请求频率超限（`retry_after` 字段提示等待秒数）
+- `500 internal_server_error` — 服务内部错误（详细错误仅写日志，客户端只见通用消息 + request_id）
+- `503 service_unavailable` — 依赖不可用（如 ClickHouse/Postgres 离线）
 
-## 10. 限流（Phase 2）
+## 10. 限流
 
-预留维度：
-- 按 API Key 限流（per-minute）
-- 按 IP 限流
-- 按 Agent 限流
+已实现 Token Bucket 算法，按 IP 限流：
 
-Token Bucket 算法。
+| 配置项 | 环境变量 | 默认值 |
+|--------|---------|--------|
+| 启用 | `AGENTPULSE_RATE_LIMIT_ENABLED` | `true` |
+| 速率 | `AGENTPULSE_RATE_LIMIT_RATE` | `10.0` 请求/秒 |
+| 突发量 | `AGENTPULSE_RATE_LIMIT_BURST` | `20` |
+
+超限响应：`HTTP 429`，Body 包含 `{"error":"rate_limit_exceeded","retry_after":<秒>}`。
+
+后续可扩展维度：按 API Key 限流、按 Agent 限流。

@@ -18,13 +18,13 @@
 
 ### 2.1 后端 (Go)
 
-- [ ] `AP_SERVER_MODE=release`
-- [ ] `AP_AUTH_ENABLED=true`
+- [ ] `AGENTPULSE_SERVER_MODE=release`
+- [ ] `AGENTPULSE_AUTH_ENABLED=true`
 - [ ] `AGENTPULSE_AUTH_API_KEYS` 设置 >=16 字符的 key，前缀建议 `ap-`
-- [ ] `AP_POSTGRES_PASSWORD` 非空且非 `changeme`
-- [ ] `AP_CLICKHOUSE_PASSWORD` 非默认
-- [ ] `AP_SERVER_ALLOWED_ORIGINS` 仅包含可信前端域名
-- [ ] `AP_OTLP_MAX_BODY_SIZE` 保持默认 10MB 或更低
+- [ ] `AGENTPULSE_POSTGRES_PASSWORD` 非空且非 `changeme`
+- [ ] `AGENTPULSE_CLICKHOUSE_PASSWORD` 非默认
+- [ ] `AGENTPULSE_SERVER_ALLOWED_ORIGINS` 仅包含可信前端域名
+- [ ] `AGENTPULSE_OTLP_MAX_BODY_SIZE` 保持默认 10MB 或更低
 - [ ] 日志级别 `info`，避免 debug 泄漏 DSN
 
 ### 2.2 Python SDK
@@ -64,7 +64,8 @@ export AGENTPULSE_AUTH_API_KEYS="ap-prod-key-xxxxxxxx,ap-backup-yyyyyyyy"
 
 传输方式：
 - REST API: `X-AgentPulse-Key` Header
-- OTLP HTTP: 同 Header（`OTLPRequireKey=true` 时）
+- OTLP HTTP: 同 Header（`AGENTPULSE_AUTH_OTLP_REQUIRE_KEY=true` 时）
+- OTLP gRPC: `x-agentpulse-key` metadata（同样受 `AGENTPULSE_AUTH_OTLP_REQUIRE_KEY` 控制）
 
 ## 4. 敏感数据处理
 

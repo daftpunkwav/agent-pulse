@@ -677,14 +677,14 @@ POST /api/v1/abtests/{id}/abort     # ⏳ Phase 2
 ### 5.7 OTLP 接收
 
 ```
-gRPC: 0.0.0.0:4317  # ⏳ Phase 2 计划,当前未实现
+gRPC: 0.0.0.0:4317  # ✅ OpenTelemetry OTLP/gRPC
 HTTP: 0.0.0.0:4318  # ✅ OpenTelemetry OTLP/HTTP
 ```
 
 **当前 OTLP 接收器要求**:
-- `X-AgentPulse-Key` 头必须(与 API Key 同一组)
-- 单次请求 body 上限 10MB(可通过 `OTLP_MAX_BODY_SIZE` 调整)
-- 异步写入 ClickHouse,返回 `ExportTracePartialSuccess` 反馈
+- `X-AgentPulse-Key` 头必须（当 `AGENTPULSE_AUTH_OTLP_REQUIRE_KEY=true` 时）
+- 单次请求 body 上限 10MB（可通过 `AGENTPULSE_OTLP_MAX_BODY_SIZE` 调整）
+- 异步写入 ClickHouse，返回 `ExportTraceServicePartialSuccess` 反馈
 
 ---
 
@@ -696,7 +696,11 @@ HTTP: 0.0.0.0:4318  # ✅ OpenTelemetry OTLP/HTTP
 
 ```bash
 pip install agentpulse
+# 或带框架适配器
+pip install agentpulse[langchain,langgraph,autogen]
 ```
+
+**要求**: Python >= 3.11
 
 #### 基础用法
 
@@ -754,7 +758,9 @@ class AgentPulseClient:
     def shutdown(self): ...  # 关闭客户端
 ```
 
-### 6.2 Go SDK
+### 6.2 Go SDK（Phase 3 计划中）
+
+> **状态**: `sdk-go/` 目录当前为空（Phase 3 占位）。以下 API 为设计草案，可能与最终实现有差异。
 
 #### 安装
 

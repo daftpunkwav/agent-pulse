@@ -118,6 +118,6 @@ cd deploy && docker compose config
 AgentPulse 已从「MVP 原型」提升到「可部署预生产」水准。上线前请务必：
 
 1. 轮换所有默认密码与 API Key
-2. 配置 `AP_AUTH_ENABLED=true`
+2. 配置 `AGENTPULSE_AUTH_ENABLED=true`
 3. 部署监控（/healthz、/readyz、OTLP 错误率）
 4. 阅读 [docs/SECURITY.md](SECURITY.md) 完成部署清单

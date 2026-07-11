@@ -31,7 +31,9 @@ logger = logging.getLogger(__name__)
 
 _OTLP_HTTP_PORT = 4318
 _OTLP_TRACES_SUFFIX = "/v1/traces"
-_API_KEY_PATTERN = re.compile(r"^ap-[a-zA-Z0-9_-]{13,}$")
+_OTLP_TIMEOUT = 30  # 秒；防止网络故障时 OTLP 上报无限挂起
+# 支持两种格式：ap- 前缀（客户端预配置）或 64 位十六进制 SHA-256（后端颁发）
+_API_KEY_PATTERN = re.compile(r"^(ap-[a-zA-Z0-9_-]{13,}|[a-f0-9]{64})$")
 
 
 @dataclass
@@ -144,6 +146,7 @@ class Client:
         exporter = OTLPSpanExporter(
             endpoint=otlp_endpoint,
             headers=headers or None,
+            timeout=_OTLP_TIMEOUT,
         )
 
         # 构造 Provider
@@ -288,6 +291,13 @@ def init(
     _validate_api_key(api_key)
     if kwargs:
         logger.debug("init() received unused kwargs: %s", list(kwargs.keys()))
+
+    # 采样率范围校验，防止无效值被静默接受
+    if sample_rate < 0 or sample_rate > 1:
+        logger.warning(
+            "sample_rate=%.3f is outside [0, 1], clamping", sample_rate
+        )
+        sample_rate = max(0.0, min(1.0, sample_rate))
 
     config = ClientConfig(
         api_key=api_key,

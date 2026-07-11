@@ -20,7 +20,7 @@
 | Backend (Go) | [`/backend`](../backend) — API 入口见 `internal/api/router.go` |
 | Web (Next.js) | [`/web/README.md`](../web/README.md) |
 | Python SDK | [`/sdk-python/README.md`](../sdk-python/README.md) |
-| Go SDK | [`/sdk-go/`](../sdk-go) — Phase 3 占位,当前请用 OTLP 官方 SDK |
+| Go SDK | [`/sdk-go/`](../sdk-go) — Phase 3 占位，当前请用 OTLP 官方 SDK |
 | 部署 | [`/deploy/README.md`](../deploy/README.md) |
 
 ## 快速链接

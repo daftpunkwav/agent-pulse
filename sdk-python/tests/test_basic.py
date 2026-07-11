@@ -156,6 +156,55 @@ def test_set_ap_attribute_preserves_numeric_types():
     _set_ap_attribute(span, "ap.model", "gpt-4o")
     span.set_attribute.assert_called_with("ap.model", "gpt-4o")
 
+    # bool 类型保留
+    span.reset_mock()
+    _set_ap_attribute(span, "ap.flag", True)
+    span.set_attribute.assert_called_with("ap.flag", True)
+
+
+def test_set_ap_attribute_raises_for_unsupported_types():
+    """不支持的属性类型应抛 TypeError，避免静默丢失信息。"""
+    from unittest.mock import MagicMock
+
+    from agentpulse.spans import _set_ap_attribute
+
+    span = MagicMock()
+    with pytest.raises(TypeError, match="unsupported attribute type"):
+        _set_ap_attribute(span, "ap.custom", {"key": "value"})
+
+    with pytest.raises(TypeError, match="unsupported attribute type"):
+        _set_ap_attribute(span, "ap.custom", object())
+
+    # 验证未对不合法值调用 set_attribute
+    span.set_attribute.assert_not_called()
+
+
+def test_session_metadata_preserves_types():
+    """Session metadata 应在 to_attributes 中保留原生数值类型。"""
+    attrs = Session(
+        user_id="u-1",
+        metadata={
+            "str_key": "hello",
+            "int_key": 42,
+            "float_key": 3.14,
+            "bool_key": True,
+            "list_key": ["a", "b"],
+        },
+    ).to_attributes()
+
+    assert attrs["ap.session.metadata.str_key"] == "hello"
+    assert attrs["ap.session.metadata.int_key"] == 42
+    assert attrs["ap.session.metadata.float_key"] == 3.14
+    assert attrs["ap.session.metadata.bool_key"] is True
+    assert attrs["ap.session.metadata.list_key"] == ["a", "b"]
+
+    # 不支持的 dict 类型走 str() 兜底
+    attrs2 = Session(
+        user_id="u-1",
+        metadata={"dict_key": {"nested": 1}},
+    ).to_attributes()
+    assert attrs2["ap.session.metadata.dict_key"] == "{'nested': 1}"
+
 
 def test_trace_sets_span_type():
     """测试 trace() 写入 ap.span_type。"""
