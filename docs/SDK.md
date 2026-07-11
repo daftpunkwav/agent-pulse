@@ -23,6 +23,8 @@ source .venv/bin/activate
 pip install agentpulse
 ```
 
+**要求**: Python >= 3.11
+
 ### 2.2 核心 API 速查
 
 | API | 用途 | 示例 |
@@ -79,9 +81,9 @@ hook = AgentPulseAutoGenHook(agent_name="my-autogen")
 hook.wrap_agent(my_agent)
 ```
 
-## 3. Go SDK（Phase 3 计划中, 当前未实现）
+## 3. Go SDK（Phase 3 计划中）
 
-> **状态**: `sdk-go/` 目录当前仅占位 (`sdk-go/.gitkeep`),Go SDK 将在 Phase 3 实现。以下 API 为设计草案,可能与最终实现有差异。
+> **状态**: `sdk-go/` 目录当前为空（Phase 3 占位），Go SDK 将在 Phase 3 实现。以下 API 为设计草案，可能与最终实现有差异。
 
 ### 3.1 计划 API
 
@@ -109,15 +111,21 @@ func main() {
 任何支持 OTLP 的客户端都可以直接接入 AgentPulse：
 
 ```bash
-# 环境变量配置
+# 环境变量配置（HTTP）
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+
+# 或（gRPC）
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 
 # 启动你的应用（任意语言）
 python my_agent.py
 ```
 
 Trace 会自动上报到 AgentPulse。配合 `ap.*` 属性自定义业务字段。
+
+OTLP 端点需要 `X-AgentPulse-Key` 头（当 `AGENTPULSE_AUTH_OTLP_REQUIRE_KEY=true` 时）。
 
 ## 5. OpenTelemetry 语义约定映射
 

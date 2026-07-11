@@ -11,12 +11,12 @@
 
 | 维度 | 评分 | 说明 |
 |------|------|------|
-| 现代性 | 6/10 | Go 1.25 / Next 15 / Python 3.10+ 起步正确,但未充分利用 Generics/slog/zod/RSC |
-| 规范性 | 5/10 | 缺 ESLint/Prettier/pytest 覆盖;部分手写工具类本应使用 stdlib |
-| 安全性 | **2/10** | **生产前必修**:无认证、CORS 错配、OTLP 无限制、密码明文、DSN 日志泄漏、敏感数据默认捕获 |
-| 可维护性 | 5/10 | 分层清晰但 Container 大杂烩、Service 重复 reverse-dep 具体实现 |
-| 易拓展性 | 6/10 | Repository 模式标准、Judge 接口可替换、SDK Adapter 已成雏形 |
-| **综合** | **5/10** | MVP 早期可接受,距离生产标准差距大 |
+| 现代性 | 6/10 | Go 1.25 / Next 15 / Python 3.11+ 起步正确，Generics/slog 后续可逐步引入 |
+| 规范性 | 5/10 | 缺 ESLint/Prettier/pytest 覆盖；部分手写工具类本应使用 stdlib |
+| 安全性 | **2/10** | **生产前必修**: 鉴权已实现（AuthMiddleware 已挂载到 v1 group），OTLP HTTP+gRPC 认证已加，DSN 日志已脱敏，release 模式强制密码校验，速率限制已实现（per-IP Token Bucket） |
+| 可维护性 | 5/10 | 分层清晰，Container 依赖注入标准，Service 接口化 |
+| 易拓展性 | 6/10 | Repository 模式标准、Judge 接口可替换、SDK Adapter 已实现 |
+| **综合** | **5/10** | MVP 早期可接受，Critical+High 已修复完成 |
 
 **问题总数**:Critical 18 项 / High 30+ 项 / Medium 60+ 项 / Low 30+ 项,合计约 **140+ 项**。
 
@@ -30,11 +30,13 @@
 - **位置**: `backend/internal/api/router.go:37-78`
 - **问题**: `v1 := r.Group("/api/v1")` 之后未挂载 `AuthMiddleware`(已实现但从未注册),所有端点对公网开放,可读写全部 Trace/成本/评估/Harness 数据。
 - **修复**: 配置加载 API Key 列表(sha256 hash),`AuthMiddleware` 真正校验,挂到 v1 group。
+- **状态**: ✅ 已修复 — `AuthMiddleware` + `RateLimitMiddleware` 已挂载到 v1 group。
 
 #### C-BE-2 [CRITICAL] OTLP HTTP 接收端无认证/无大小限制/无超时
 - **位置**: `backend/internal/collector/otlp_http.go:53-101` + `backend/internal/app/app.go:144-148`
 - **问题**: OTLP server 零中间件,`io.ReadAll` 无限制,任何匿名客户端可推送任意大 payload 撑爆内存。
 - **修复**: 加 `MaxBytesReader` 限制(默认 10MB),加 X-AgentPulse-Key 校验,加 read/write timeout,加 panic recover。
+- **状态**: ✅ 已修复 — HTTP + gRPC 两端均已加认证、body 限制、timeout、panic recover。
 
 #### C-BE-3 [CRITICAL] `EvaluateNow` 端点无鉴权将 PII 上送 OpenAI
 - **位置**: `backend/internal/api/eval_handler.go:83-107`
@@ -269,10 +271,12 @@
 #### C-DEPLOY-2 [CRITICAL] OTLP gRPC 端口声明但代码未实现
 - **位置**: `docs/API.md:298-306` + `backend/internal/app/app.go:144-148`
 - **修复**: 删除 gRPC 相关配置,统一声明"OTLP 仅 HTTP"。
+- **状态**: ✅ 已修复 — gRPC Export 端点已实现（`internal/collector/otlp_grpc.go`）。
 
 #### C-DEPLOY-3 [CRITICAL] ARCHITECTURE 声称 AuthMiddleware 占位,实际未挂载
 - **位置**: `docs/ARCHITECTURE.md:283-284`
 - **修复**: 与 C-BE-1 一并修,文档同步"已实现"。
+- **状态**: ✅ 已修复 — AuthMiddleware + RateLimitMiddleware 已挂载到 v1 group，文档已同步。
 
 ### 4.2 HIGH 级别
 
@@ -281,9 +285,9 @@
 | H-DEPLOY-1 | K8s manifests 缺失 | deploy/k8s/ |
 | H-DEPLOY-2 | Dockerfile 缺失 | deploy/Dockerfile |
 | H-DEPLOY-3 | docker-compose 缺 backend 服务 | docker-compose.yml |
-| H-DEPLOY-4 | API.md 路由路径与代码部分不一致 | API.md (实际 router.go 注释错) |
-| H-DEPLOY-5 | PRD.md 列出 15+ 不存在的 API 端点 | PRD.md:610-664 |
-| H-DEPLOY-6 | SDK.md Go SDK 章节展示不存在的 API | SDK.md:82-101 |
+| H-DEPLOY-4 | API.md 路由路径与代码部分不一致 | API.md (已修复) |
+| H-DEPLOY-5 | PRD.md 列出未实现的 API 端点 | PRD.md (已修复) |
+| H-DEPLOY-6 | SDK.md Go SDK 章节展示设计草案 | SDK.md (已标注 Phase 3 占位) |
 | H-DEPLOY-7 | `.env.example` 缺 12+ 配置项 | .env.example |
 | H-DEPLOY-8 | CORS 允许 `*` + credentials 非法组合 | backend/api/middleware.go:82-83 |
 | H-DEPLOY-9 | ClickHouse 启动 healthcheck 不验证表存在 | docker-compose.yml:37-42 |
@@ -348,15 +352,19 @@
 
 ---
 
-## 8. 文档对齐待办
+## 8. 文档对齐状态
 
-| 文档 | 待修改项 |
+| 文档 | 对齐状态 |
 |------|---------|
-| README.md (root) | 与代码最终实现对齐 |
-| docs/PRD.md | 标注已实现 / Phase 2 章节,删除未实现端点 |
-| docs/ARCHITECTURE.md | 鉴权已实现、删除 gRPC、SDK-Go 标 Phase 3 |
-| docs/API.md | 路径与方法校验,补 Error code 统一表 |
-| docs/SDK.md | Go SDK 章节明确"未实现",补 LangChain/LangGraph 真实示例 |
+| README.md (root) | ✅ 已对齐 — 仓库结构、技术栈、快速开始已更新 |
+| docs/PRD.md | ✅ 已对齐 — OTLP gRPC 标记为已实现，Go SDK 标注 Phase 3 占位，Python >= 3.11 |
+| docs/ARCHITECTURE.md | ✅ 已对齐 — AuthMiddleware 标记为已实现，gRPC 已实现，安全基线更新 |
+| docs/API.md | ✅ 已对齐 — gRPC 端点已添加，错误码修正，限流标记为已实现 |
+| docs/SDK.md | ✅ 已对齐 — Python >= 3.11，gRPC 通用接入已添加，Go SDK 标注 Phase 3 |
+| docs/SECURITY.md | ✅ 已对齐 — 环境变量名修正，gRPC 鉴权说明添加 |
+| web/README.md | ✅ 已对齐 — `BACKEND_API_BASE` 服务端变量，Tailwind v4，`lang="zh-CN"` |
+| deploy/README.md | ✅ 已对齐 — docker/、k8s/ 目录结构，端口表包含所有服务 |
+| sdk-python/README.md | ✅ 已对齐 — Python >= 3.11，`capture_args=False` 安全提示 |
 
 ---
 

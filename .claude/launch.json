@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "agentpulse-web",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "npx", "next", "dev"],
+      "port": 3101,
+      "autoPort": true
+    }
+  ]
+}

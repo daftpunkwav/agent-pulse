@@ -31,7 +31,7 @@ cp .env.example .env.local
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `NEXT_PUBLIC_API_BASE` | `http://localhost:8080` | AgentPulse 后端地址 |
+| `BACKEND_API_BASE` | `http://localhost:8080` | AgentPulse 后端地址（服务端变量，不暴露给浏览器） |
 
 ## 目录结构
 
@@ -58,7 +58,9 @@ src/
 - **SWR 2.2** (数据获取)
 - **Recharts 2.13** (可视化)
 - **Lucide React** (图标)
-- **Tailwind 内联替代** (原生 CSS)
+- **Tailwind CSS v4** (样式)
+- **Zod** (运行时校验)
+- **next-themes** (主题切换)
 
 ## API 代理
 
