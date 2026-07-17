@@ -347,7 +347,7 @@ func validate(cfg *Config) error {
 	v := validator.New()
 
 	// 自定义校验必须在 Struct 之前执行，以便覆盖 validator 默认错误信息。
-	// 1. release 模式: 禁止默认密码 / 空白密码。
+	// 1. release 模式: 强制鉴权、禁止默认密码 / 空白密码。
 	if cfg.Server.Mode == "release" {
 		if cfg.Postgres.Password == "" || cfg.Postgres.Password == "changeme" {
 			return fmt.Errorf("postgres.password must be set to a non-default value in release mode")
@@ -355,7 +355,11 @@ func validate(cfg *Config) error {
 		if cfg.Judge.APIKey == "" {
 			return fmt.Errorf("judge.api_key must be set in release mode")
 		}
-		if cfg.Auth.Enabled && len(cfg.APIKeysResolved()) == 0 {
+		// 生产必须开启 API 鉴权，避免 /api/v1/* 对公网裸奔
+		if !cfg.Auth.Enabled {
+			return fmt.Errorf("auth.enabled must be true in release mode")
+		}
+		if len(cfg.APIKeysResolved()) == 0 {
 			return fmt.Errorf("auth.enabled=true requires at least one API key (auth.api_keys)")
 		}
 	}

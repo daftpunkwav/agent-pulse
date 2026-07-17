@@ -56,7 +56,11 @@ func newTokenBucket(rate float64, burst int) *tokenBucket {
 }
 
 // allow 检查是否允许请求，返回 true 表示通过。
+// 必须加锁：同一 IP 的并发请求会共享同一 bucket。
 func (b *tokenBucket) allow() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	now := time.Now()
 	elapsed := now.Sub(b.lastRefill).Seconds()
 	b.tokens = min(b.tokens+elapsed*b.rate, float64(b.burst))
@@ -91,7 +95,11 @@ func RateLimitMiddleware(cfg *config.Config, log logger.Logger) gin.HandlerFunc 
 	log.Infof("rate limiter enabled: rate=%.1f/s burst=%d", rlCfg.Rate, rlCfg.Burst)
 
 	return func(c *gin.Context) {
-		ip := clientIP(c.Request)
+		// 使用 Gin ClientIP：尊重 TrustedProxies；未配置时不盲目信任 XFF
+		ip := c.ClientIP()
+		if ip == "" {
+			ip = "unknown"
+		}
 		bkt, _ := buckets.LoadOrStore(ip, newTokenBucket(rlCfg.Rate, rlCfg.Burst))
 
 		if !bkt.(*tokenBucket).allow() {

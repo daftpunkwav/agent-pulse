@@ -60,4 +60,5 @@ secrets/
 logs/
 tmp/
 data/
+deploy/data/
 deploy/.data/

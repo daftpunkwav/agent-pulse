@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import {
   LineChart,
@@ -16,7 +16,7 @@ import {
   costBreakdownResponseSchema,
   costTimelineResponseSchema,
 } from "@/lib/schemas";
-import { timeWindowParams } from "@/lib/validation";
+import { useTimeWindow } from "@/lib/hooks/useTimeWindow";
 import { useChartTheme } from "@/lib/hooks/useChartTheme";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState } from "@/components/ErrorState";
@@ -25,14 +25,7 @@ import { EmptyState } from "@/components/EmptyState";
 
 export function CostView() {
   const [days, setDays] = useState(7);
-
-  const windowParams = useMemo(() => {
-    const to = new Date();
-    to.setMilliseconds(0);
-    const from = new Date(to.getTime() - days * 24 * 3600 * 1000);
-    from.setMilliseconds(0);
-    return timeWindowParams(from, to);
-  }, [days]);
+  const windowParams = useTimeWindow({ days });
 
   const {
     data: breakdown,

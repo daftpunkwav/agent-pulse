@@ -199,8 +199,8 @@ def _execute_traced_sync(
 
         try:
             result = func(*args, **kwargs)
-        except Exception as exc:
-            t.record_exception(exc)
+        except Exception:
+            # 异常由 trace() 上下文统一 record_exception，避免双记
             raise
 
         if capture_result and result is not None:
@@ -233,8 +233,8 @@ async def _execute_traced_async(
 
         try:
             result = await func(*args, **kwargs)
-        except Exception as exc:
-            t.record_exception(exc)
+        except Exception:
+            # 异常由 trace() 上下文统一 record_exception，避免双记
             raise
 
         if capture_result and result is not None:

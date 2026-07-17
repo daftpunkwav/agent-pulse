@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import {
   RadarChart,
@@ -23,6 +23,8 @@ import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
 
+const AGENT_DEBOUNCE_MS = 400;
+
 export function EvalView() {
   const [agentInput, setAgentInput] = useState("interview-agent");
   const [activeAgent, setActiveAgent] = useState("interview-agent");
@@ -30,6 +32,24 @@ export function EvalView() {
 
   const windowParams = useTimeWindow({ days: 7 });
   const chart = useChartTheme();
+
+  // debounce：输入中不立刻改 SWR key，避免请求风暴
+  useEffect(() => {
+    const safe = sanitizeAgentName(agentInput);
+    const timer = setTimeout(() => {
+      if (safe) {
+        setValidationError(null);
+        setActiveAgent(safe);
+      } else if (agentInput.trim()) {
+        setValidationError("Agent 名称仅允许小写字母、数字和连字符");
+        setActiveAgent("");
+      } else {
+        setValidationError(null);
+        setActiveAgent("");
+      }
+    }, AGENT_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [agentInput]);
 
   const safeAgent = sanitizeAgentName(activeAgent);
   const { data, error, isLoading, mutate } = useSWR(
@@ -41,18 +61,6 @@ export function EvalView() {
 
   const handleAgentChange = (value: string) => {
     setAgentInput(value);
-    const safe = sanitizeAgentName(value);
-    if (safe) {
-      setValidationError(null);
-      setActiveAgent(safe);
-    } else if (value.trim()) {
-      setValidationError("Agent 名称仅允许小写字母、数字和连字符");
-      // 非空非法输入：清掉旧 query 防止向后端发送错误 agent
-      setActiveAgent("");
-    } else {
-      setValidationError(null);
-      setActiveAgent("");
-    }
   };
 
   const radarData = data?.scores

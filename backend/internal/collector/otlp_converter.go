@@ -66,7 +66,15 @@ func SpanFromOTLP(
 
 	if os.GetEndTimeUnixNano() > 0 {
 		span.EndTime = time.Unix(0, int64(os.GetEndTimeUnixNano()))
-		span.LatencyMs = uint32(span.EndTime.Sub(span.StartTime).Milliseconds())
+		// EndTime < StartTime 时 Sub().Milliseconds() 为负，强转 uint32 会变成极大值
+		if !span.EndTime.Before(span.StartTime) {
+			ms := span.EndTime.Sub(span.StartTime).Milliseconds()
+			if ms > int64(^uint32(0)) {
+				span.LatencyMs = ^uint32(0)
+			} else if ms > 0 {
+				span.LatencyMs = uint32(ms)
+			}
+		}
 	}
 
 	// 错误状态

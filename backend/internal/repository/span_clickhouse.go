@@ -107,7 +107,8 @@ func (r spanRow) toDomain() *domain.Span {
 	}
 	if r.Attributes != "" {
 		if err := json.Unmarshal([]byte(r.Attributes), &s.Attributes); err != nil {
-			s.ErrorMessage = fmt.Sprintf("parse attributes: %v", err)
+			// 勿覆盖业务 ErrorMessage；解析失败时 attributes 保持空
+			s.Attributes = nil
 		}
 	}
 	return s
@@ -397,13 +398,18 @@ func (r *ClickHouseSpanRepo) list(ctx context.Context, opts *domain.ListOptions,
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
+	offset := opts.Offset
+	if offset < 0 {
+		offset = 0
+	}
 
+	// limit/offset 为经白名单校验后的 int，安全拼入 SQL
 	query := fmt.Sprintf(
-		"%s WHERE %s ORDER BY %s %s LIMIT %d",
+		"%s WHERE %s ORDER BY %s %s LIMIT %d OFFSET %d",
 		spanSelectSQL,
 		strings.Join(conditions, " AND "),
 		orderBy, order,
-		limit,
+		limit, offset,
 	)
 
 	var spans []*domain.Span

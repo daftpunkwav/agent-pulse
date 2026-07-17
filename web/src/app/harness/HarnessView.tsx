@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { ApiError, createSchemaFetcher, postJson } from "@/lib/api";
 import { harnessVersionsResponseSchema } from "@/lib/schemas";
@@ -13,12 +13,31 @@ import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
 
+const AGENT_DEBOUNCE_MS = 400;
+
 export function HarnessView() {
   const [agentInput, setAgentInput] = useState("interview-agent");
   const [activeAgent, setActiveAgent] = useState("interview-agent");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [promoteError, setPromoteError] = useState<string | null>(null);
   const [promotingVersion, setPromotingVersion] = useState<number | null>(null);
+
+  useEffect(() => {
+    const safe = sanitizeAgentName(agentInput);
+    const timer = setTimeout(() => {
+      if (safe) {
+        setValidationError(null);
+        setActiveAgent(safe);
+      } else if (agentInput.trim()) {
+        setValidationError("Agent 名称仅允许小写字母、数字和连字符");
+        setActiveAgent("");
+      } else {
+        setValidationError(null);
+        setActiveAgent("");
+      }
+    }, AGENT_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [agentInput]);
 
   const safeAgent = sanitizeAgentName(activeAgent);
   const { data, error, isLoading, mutate } = useSWR(
@@ -30,17 +49,6 @@ export function HarnessView() {
 
   const handleAgentChange = (value: string) => {
     setAgentInput(value);
-    const safe = sanitizeAgentName(value);
-    if (safe) {
-      setValidationError(null);
-      setActiveAgent(safe);
-    } else if (value.trim()) {
-      setValidationError("Agent 名称仅允许小写字母、数字和连字符");
-      setActiveAgent("");
-    } else {
-      setValidationError(null);
-      setActiveAgent("");
-    }
   };
 
   const handlePromote = async (version: number) => {

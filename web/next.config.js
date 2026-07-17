@@ -34,6 +34,17 @@ const nextConfig = {
         destination: `${backend}/api/v1/${prefix}/:path*`,
       },
     ]);
+    // 健康检查不在 /api/v1 下，单独代理（无鉴权）
+    rules.push(
+      {
+        source: "/api/backend/healthz",
+        destination: `${backend}/healthz`,
+      },
+      {
+        source: "/api/backend/readyz",
+        destination: `${backend}/readyz`,
+      }
+    );
     return rules;
   },
 };

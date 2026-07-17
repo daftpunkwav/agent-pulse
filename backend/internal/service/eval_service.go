@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/agentpulse/backend/internal/domain"
+	"github.com/agentpulse/backend/internal/pii"
 	"github.com/agentpulse/backend/pkg/logger"
 	"github.com/sashabaranov/go-openai"
 )
@@ -168,16 +169,18 @@ func (s *EvalService) evalWorker(id int) {
 	for {
 		select {
 		case job := <-s.queue:
+			// 整段评估+持久化共用超时；cancel 必须在 Insert 之后，否则写入会 context canceled
 			ctx, cancel := context.WithTimeout(context.Background(), s.evalTimeout)
 			eval, err := s.evaluate(ctx, job.span)
-			cancel()
 			if err != nil {
+				cancel()
 				s.logger.Errorf("worker %d: evaluate span %s: %v", id, job.span.ID, err)
 				continue
 			}
 			if err := s.evalRepo.Insert(ctx, eval); err != nil {
 				s.logger.Errorf("worker %d: persist eval for span %s: %v", id, job.span.ID, err)
 			}
+			cancel()
 		case <-s.closed:
 			return
 		}
@@ -190,10 +193,12 @@ func (s *EvalService) evaluate(ctx context.Context, span *domain.Span) (*domain.
 		return nil, fmt.Errorf("judge client not configured")
 	}
 
+	// 统一出口脱敏：异步评估与 EvaluateNow 均经此路径，避免 PII 上送 Judge
+	// Metadata/Attributes 默认不传，降低 prompt/工具参数中的敏感字段外泄面
 	input := &domain.JudgeInput{
-		UserInput:   span.InputPreview,
-		AgentOutput: span.OutputPreview,
-		Metadata:    span.Attributes,
+		UserInput:   pii.Redact(span.InputPreview),
+		AgentOutput: pii.Redact(span.OutputPreview),
+		Metadata:    nil,
 	}
 
 	prompt := buildJudgePrompt(input)

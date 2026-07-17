@@ -34,8 +34,23 @@ export function OverviewView() {
     createSchemaFetcher(clustersResponseSchema)
   );
 
+  // 探活（无鉴权）；与业务数据解耦，用于系统状态卡片
+  const { data: health } = useSWR(
+    "/api/backend/healthz",
+    async (url: string) => {
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        return { ok: res.ok };
+      } catch {
+        return { ok: false };
+      }
+    },
+    { refreshInterval: 30_000, shouldRetryOnError: false }
+  );
+
   const isLoading = costLoading || clustersLoading;
-  const error = costError ?? clustersError;
+  // 两侧都失败才整页错误；单侧失败局部降级
+  const bothFailed = costError && clustersError;
 
   return (
     <div>
@@ -43,9 +58,15 @@ export function OverviewView() {
 
       {isLoading ? (
         <LoadingState />
-      ) : error ? (
+      ) : bothFailed ? (
         <ErrorState
-          message={error instanceof Error ? error.message : "加载失败"}
+          message={
+            costError instanceof Error
+              ? costError.message
+              : clustersError instanceof Error
+                ? clustersError.message
+                : "加载失败"
+          }
           onRetry={() => {
             void mutateCost();
             void mutateClusters();
@@ -56,25 +77,47 @@ export function OverviewView() {
           <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               label="总成本 (24h)"
-              value={cost ? `$${cost.total_usd.toFixed(4)}` : "—"}
+              value={
+                costError
+                  ? "加载失败"
+                  : cost
+                    ? `$${cost.total_usd.toFixed(4)}`
+                    : "—"
+              }
               variant="cost"
               icon={<DollarSign className="h-4 w-4 text-emerald-600" />}
             />
             <MetricCard
               label="总 Token 数"
-              value={cost ? cost.total_tokens.toLocaleString() : "—"}
+              value={
+                costError
+                  ? "加载失败"
+                  : cost
+                    ? cost.total_tokens.toLocaleString()
+                    : "—"
+              }
               variant="tokens"
               icon={<Activity className="h-4 w-4 text-cyan-600" />}
             />
             <MetricCard
               label="失败聚类"
-              value={clusters?.count ?? clusters?.clusters.length ?? 0}
+              value={
+                clustersError
+                  ? "加载失败"
+                  : (clusters?.count ?? clusters?.clusters.length ?? 0)
+              }
               variant="alert"
               icon={<AlertCircle className="h-4 w-4 text-amber-600" />}
             />
             <MetricCard
               label="系统状态"
-              value="运行中"
+              value={
+                health == null
+                  ? "检测中"
+                  : health.ok
+                    ? "运行中"
+                    : "离线"
+              }
               variant="status"
               icon={<CheckCircle className="h-4 w-4 text-emerald-500" />}
             />

@@ -73,17 +73,37 @@ func NewContainer(repos *repository.Container, cfg *config.Config, log logger.Lo
 
 // Shutdown 优雅关闭所有服务。
 func (c *Container) Shutdown(ctx context.Context) {
-	// 关闭 LLM Judge 客户端
+	// 先停评估队列，再 drain Span 批量写入，避免进程退出丢数
 	if c.EvalService != nil {
 		c.EvalService.Shutdown(ctx)
+	}
+	if c.SpanService != nil {
+		c.SpanService.Shutdown(ctx)
 	}
 }
 
 // IngestSpans 实现 collector.ServiceContainer 接口。
+//
+// 入队成功后按 sample_rate 异步触发在线评估（Agent/LLM span）。
 func (c *Container) IngestSpans(ctx context.Context, spans []*domain.Span) error {
 	if c.SpanService == nil {
 		return nil
 	}
-	return c.SpanService.IngestSpans(ctx, spans)
+	if err := c.SpanService.IngestSpans(ctx, spans); err != nil {
+		return err
+	}
+	// 接通 evaluation.sample_rate：仅对 Agent / LLM 调用采样评估
+	if c.EvalService != nil {
+		for _, span := range spans {
+			if span == nil {
+				continue
+			}
+			switch span.Type {
+			case domain.SpanTypeAgent, domain.SpanTypeLLM:
+				c.EvalService.EvaluateAsync(ctx, span)
+			}
+		}
+	}
+	return nil
 }
 

@@ -259,10 +259,11 @@ func HealthHandler(services *service.Container, log logger.Logger) gin.HandlerFu
 		}
 
 		if err := services.HealthPinger.HealthCheck(); err != nil {
+			// 详情只写日志，避免向客户端泄漏主机/库名/驱动信息
 			log.WithField("error", err.Error()).Warnf("readiness check failed")
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status":    "not_ready",
-				"error":     err.Error(),
+				"message":   "one or more dependencies unavailable",
 				"timestamp": time.Now().UTC().Format(time.RFC3339),
 			})
 			return

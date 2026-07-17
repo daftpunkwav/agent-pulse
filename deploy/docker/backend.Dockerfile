@@ -11,7 +11,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/agentpu
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=builder /out/agentpulse-server /app/agentpulse-server
+# 镜像内提供 example 作为默认配置路径；生产应挂载覆盖 /app/configs/config.yaml
 COPY backend/configs/config.example.yaml /app/configs/config.example.yaml
+COPY backend/configs/config.example.yaml /app/configs/config.yaml
 USER nonroot:nonroot
 EXPOSE 8080 4318
 ENTRYPOINT ["/app/agentpulse-server"]

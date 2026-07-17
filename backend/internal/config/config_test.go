@@ -253,6 +253,51 @@ otlp:
 	assertErrorContains(t, err, "auth.enabled=true requires at least one API key")
 }
 
+func TestValidateReleaseRequiresAuthEnabled(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	content := []byte(`
+server:
+  host: "0.0.0.0"
+  port: 8080
+  mode: "release"
+
+log:
+  level: "info"
+  format: "json"
+
+auth:
+  enabled: false
+
+clickhouse:
+  host: "localhost"
+  port: 9000
+  database: "agentpulse"
+  username: "default"
+
+postgres:
+  host: "localhost"
+  port: 5432
+  database: "agentpulse"
+  username: "agentpulse"
+  password: "strong-password-123"
+
+judge:
+  model: "gpt-4o"
+  api_key: "sk-test-key-1234567890abcdef"
+
+otlp:
+  grpc_port: 4317
+  http_port: 4318
+`)
+	if err := os.WriteFile(tmpDir+"/config.yaml", content, 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := config.Load(tmpDir)
+	assertErrorContains(t, err, "auth.enabled must be true in release mode")
+}
+
 func TestValidateShortAPIKeyRejected(t *testing.T) {
 	tmpDir := t.TempDir()
 

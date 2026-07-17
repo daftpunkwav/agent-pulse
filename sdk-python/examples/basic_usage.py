@@ -13,8 +13,10 @@ from agentpulse import init, observe, session, shutdown, trace
 
 
 # 1. 初始化（在应用启动时调用一次）
+# 未传参时自动读取 AGENTPULSE_API_KEY / AGENTPULSE_ENDPOINT 等环境变量；
+# 本地开发可显式传合法 ap- 前缀 key（与后端 auth.api_keys 对齐）。
 init(
-    api_key=os.environ.get("AGENTPULSE_API_KEY", "demo-key"),
+    api_key=os.environ.get("AGENTPULSE_API_KEY", "ap-demo-local-key-01"),
     endpoint=os.environ.get("AGENTPULSE_ENDPOINT", "http://localhost:8080"),
     service_name="example-app",
     environment="development",

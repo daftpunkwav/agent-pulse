@@ -141,15 +141,25 @@ class SpanWrapper:
         self._span.set_attribute(key, value)
         return self
 
-    def set_input(self, value: str, max_length: int = 4000) -> "SpanWrapper":
-        """设置输入预览（用于后端 trace 回放）。"""
-        preview = value if len(value) <= max_length else value[:max_length]
+    def set_input(self, value: Any, max_length: int = 4000) -> "SpanWrapper":
+        """设置输入预览（用于后端 trace 回放）。
+
+        接受任意类型，非 str 会 JSON/安全序列化后再截断。
+        """
+        from agentpulse.decorators import _safe_serialize
+
+        preview = _safe_serialize(value, max_length=max_length)
         self._span.set_attribute("ap.input_preview", preview)
         return self
 
-    def set_output(self, value: str, max_length: int = 4000) -> "SpanWrapper":
-        """设置输出预览。"""
-        preview = value if len(value) <= max_length else value[:max_length]
+    def set_output(self, value: Any, max_length: int = 4000) -> "SpanWrapper":
+        """设置输出预览。
+
+        接受任意类型，非 str 会 JSON/安全序列化后再截断。
+        """
+        from agentpulse.decorators import _safe_serialize
+
+        preview = _safe_serialize(value, max_length=max_length)
         self._span.set_attribute("ap.output_preview", preview)
         return self
 
@@ -328,8 +338,7 @@ def trace(
         except Exception as exc:
             wrapper.record_exception(exc)
             raise
-        finally:
-            wrapper.end()
+        # 不在此 end：由 start_as_current_span 上下文管理器结束 span，避免双重 end
 
 
 @contextlib.contextmanager

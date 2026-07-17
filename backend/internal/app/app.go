@@ -169,8 +169,16 @@ func (a *Application) initHTTPServers() error {
 	}
 
 	// gRPC OTLP 接收器（标准 OTLP/gRPC 协议）
+	// MaxRecvMsgSize 与 HTTP MaxBodySize 对齐，防止超大 Export 撑爆内存
+	maxRecv := int(a.cfg.OTLP.MaxBodySize)
+	if maxRecv <= 0 {
+		maxRecv = 10 << 20 // 10MB 默认
+	}
 	grpcHandler := collector.NewGRPCHandler(a.cfg, a.services, a.log)
-	a.grpcServer = grpc.NewServer()
+	a.grpcServer = grpc.NewServer(
+		grpc.MaxRecvMsgSize(maxRecv),
+		grpc.MaxSendMsgSize(maxRecv),
+	)
 	collectorpb.RegisterTraceServiceServer(a.grpcServer, grpcHandler)
 	a.log.Infof("gRPC OTLP receiver configured on :%d", a.cfg.OTLP.GRPCPort)
 

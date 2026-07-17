@@ -23,6 +23,7 @@ from opentelemetry import trace as otel_trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
 from agentpulse._version import __version__
@@ -149,8 +150,10 @@ class Client:
             timeout=_OTLP_TIMEOUT,
         )
 
-        # 构造 Provider
-        provider = TracerProvider(resource=resource)
+        # 构造 Provider（应用 sample_rate 采样）
+        rate = max(0.0, min(1.0, float(self.config.sample_rate)))
+        sampler = ParentBased(TraceIdRatioBased(rate))
+        provider = TracerProvider(resource=resource, sampler=sampler)
 
         # 使用 BatchSpanProcessor 异步批处理
         processor = BatchSpanProcessor(
@@ -258,10 +261,10 @@ def _validate_api_key(api_key: str) -> None:
 
 
 def init(
-    api_key: str = "",
-    endpoint: str = "http://localhost:8080",
-    service_name: str = "agent-app",
-    environment: str = "production",
+    api_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    service_name: Optional[str] = None,
+    environment: Optional[str] = None,
     sample_rate: float = 1.0,
     flush_interval_seconds: float = 5.0,
     max_queue_size: int = 2048,
@@ -273,11 +276,14 @@ def init(
 
     应在应用启动时调用一次。
 
+    未显式传入的参数会回退到环境变量（见 ``ClientConfig.from_env``）：
+    ``AGENTPULSE_API_KEY`` / ``AGENTPULSE_ENDPOINT`` / ``AGENTPULSE_SERVICE_NAME`` 等。
+
     Args:
-        api_key: API Key（用于后端鉴权）。
-        endpoint: AgentPulse 后端地址。
-        service_name: 服务名（用于多服务区分）。
-        environment: 部署环境（production/staging/dev）。
+        api_key: API Key（用于后端鉴权）。None 时读环境变量。
+        endpoint: AgentPulse 后端地址。None 时读环境变量。
+        service_name: 服务名（用于多服务区分）。None 时读环境变量。
+        environment: 部署环境（production/staging/dev）。None 时读环境变量。
         sample_rate: 采样率，0-1 之间。
         flush_interval_seconds: 批量上报间隔。
         headers: 自定义 HTTP headers。
@@ -288,7 +294,13 @@ def init(
     Returns:
         初始化后的 Client 实例。
     """
-    _validate_api_key(api_key)
+    env_cfg = ClientConfig.from_env()
+    resolved_api_key = env_cfg.api_key if api_key is None else api_key
+    resolved_endpoint = env_cfg.endpoint if endpoint is None else endpoint
+    resolved_service = env_cfg.service_name if service_name is None else service_name
+    resolved_env = env_cfg.environment if environment is None else environment
+
+    _validate_api_key(resolved_api_key)
     if kwargs:
         logger.debug("init() received unused kwargs: %s", list(kwargs.keys()))
 
@@ -300,10 +312,10 @@ def init(
         sample_rate = max(0.0, min(1.0, sample_rate))
 
     config = ClientConfig(
-        api_key=api_key,
-        endpoint=endpoint,
-        service_name=service_name,
-        environment=environment,
+        api_key=resolved_api_key,
+        endpoint=resolved_endpoint,
+        service_name=resolved_service,
+        environment=resolved_env,
         sample_rate=sample_rate,
         flush_interval_seconds=flush_interval_seconds,
         max_queue_size=max_queue_size,

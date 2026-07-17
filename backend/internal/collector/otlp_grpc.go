@@ -59,11 +59,13 @@ func NewGRPCHandler(cfg *config.Config, services *service.Container, log logger.
 //  2. 转换 OTLP protobuf → domain.Span
 //  3. 异步批量写入
 //  4. 返回 PartialSuccess 结果
-func (h *GRPCHandler) Export(ctx context.Context, req *collectorpb.ExportTraceServiceRequest) (*collectorpb.ExportTraceServiceResponse, error) {
-	// panic 恢复
+func (h *GRPCHandler) Export(ctx context.Context, req *collectorpb.ExportTraceServiceRequest) (resp *collectorpb.ExportTraceServiceResponse, err error) {
+	// panic 恢复：必须改写命名返回值，否则 recover 后会以 (nil, nil) 伪造成功
 	defer func() {
 		if rec := recover(); rec != nil {
 			h.logger.Errorf("otlp grpc panic: %v\n%s", rec, debug.Stack())
+			resp = nil
+			err = status.Error(codes.Internal, "internal error")
 		}
 	}()
 

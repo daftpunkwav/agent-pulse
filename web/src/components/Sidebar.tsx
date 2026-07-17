@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import useSWR from "swr";
 import {
   Activity,
   DollarSign,
@@ -23,8 +24,25 @@ const navigation = [
   { name: "Harness", href: "/harness", icon: Beaker },
 ];
 
+async function healthFetcher(url: string): Promise<{ ok: boolean }> {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    return { ok: res.ok };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: health } = useSWR("/api/backend/healthz", healthFetcher, {
+    refreshInterval: 30_000,
+    revalidateOnFocus: true,
+    shouldRetryOnError: false,
+  });
+
+  const statusLabel =
+    health == null ? "检测中…" : health.ok ? "系统在线" : "系统离线";
 
   return (
     <aside className="sidebar">
@@ -72,8 +90,13 @@ export function Sidebar() {
       <div className="sidebar-footer">
         <ThemeToggle />
         <div className="flex items-center gap-2 px-1">
-          <span className="pulse-dot" />
-          <span className="text-xs text-[color:var(--ap-fg-subtle)]">系统在线</span>
+          <span
+            className={clsx(
+              "pulse-dot",
+              health?.ok === false && "opacity-40 grayscale"
+            )}
+          />
+          <span className="text-xs text-[color:var(--ap-fg-subtle)]">{statusLabel}</span>
         </div>
         <p className="px-1 font-mono text-[11px] text-[color:var(--ap-fg-subtle)]">v0.1.0</p>
       </div>
