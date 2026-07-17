@@ -13,26 +13,30 @@ data:
     server:
       mode: release
       port: 8080
-      allowed_origins:
-        - http://localhost:3000
+      allowed_origins: ""
     otlp:
       http_port: 4318
+      grpc_port: 4317
       max_body_size: 10485760
     auth:
       enabled: true
       otlp_require_key: true
+    clickhouse:
+      host: agentpulse-clickhouse
+      port: 9000
+      database: agentpulse
+      username: default
+    postgres:
+      host: agentpulse-postgres
+      port: 5432
+      database: agentpulse
+      username: agentpulse
+      ssl_mode: disable
+    chroma:
+      host: agentpulse-chroma
+      port: 8000
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: agentpulse-secrets
-  namespace: agentpulse
-type: Opaque
-stringData:
-  postgres-password: changeme-replace-in-production
-  clickhouse-password: changeme-replace-in-production
-  api-keys: ap-dev-key-replace-me-01
----
+# Secret 不入库：见 secrets.example.yaml / production secretGenerator
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -60,13 +64,62 @@ spec:
             - containerPort: 8080
               name: http
             - containerPort: 4318
-              name: otlp
+              name: otlp-http
+            - containerPort: 4317
+              name: otlp-grpc
           env:
+            # 鉴权
+            - name: AGENTPULSE_AUTH_ENABLED
+              value: "true"
             - name: AGENTPULSE_AUTH_API_KEYS
               valueFrom:
                 secretKeyRef:
                   name: agentpulse-secrets
                   key: api-keys
+            # Postgres
+            - name: AGENTPULSE_POSTGRES_HOST
+              value: agentpulse-postgres
+            - name: AGENTPULSE_POSTGRES_PORT
+              value: "5432"
+            - name: AGENTPULSE_POSTGRES_DATABASE
+              value: agentpulse
+            - name: AGENTPULSE_POSTGRES_USERNAME
+              value: agentpulse
+            - name: AGENTPULSE_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agentpulse-secrets
+                  key: postgres-password
+            # ClickHouse
+            - name: AGENTPULSE_CLICKHOUSE_HOST
+              value: agentpulse-clickhouse
+            - name: AGENTPULSE_CLICKHOUSE_PORT
+              value: "9000"
+            - name: AGENTPULSE_CLICKHOUSE_DATABASE
+              value: agentpulse
+            - name: AGENTPULSE_CLICKHOUSE_USERNAME
+              value: default
+            - name: AGENTPULSE_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agentpulse-secrets
+                  key: clickhouse-password
+            # Chroma
+            - name: AGENTPULSE_CHROMA_HOST
+              value: agentpulse-chroma
+            - name: AGENTPULSE_CHROMA_PORT
+              value: "8000"
+            - name: AGENTPULSE_CHROMA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentpulse-secrets
+                  key: chroma-token
+            # Judge（release 模式必填）
+            - name: AGENTPULSE_JUDGE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentpulse-secrets
+                  key: judge-api-key
           volumeMounts:
             - name: config
               mountPath: /app/configs/config.yaml
@@ -111,6 +164,9 @@ spec:
     - name: http
       port: 8080
       targetPort: 8080
-    - name: otlp
+    - name: otlp-http
       port: 4318
       targetPort: 4318
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317

@@ -62,3 +62,8 @@ tmp/
 data/
 deploy/data/
 deploy/.data/
+# K8s 生产密钥（仅允许 .example 入库）
+deploy/k8s/**/secrets.yaml
+deploy/k8s/**/secrets.env
+!deploy/k8s/**/secrets.example.yaml
+!deploy/k8s/**/secrets.env.example
