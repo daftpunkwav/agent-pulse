@@ -13,7 +13,6 @@ import (
 	"context"
 	"runtime/debug"
 	"strings"
-	"time"
 
 	collectorpb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"google.golang.org/grpc/codes"
@@ -57,8 +56,8 @@ func NewGRPCHandler(cfg *config.Config, services *service.Container, log logger.
 // 处理流程：
 //  1. 鉴权（X-AgentPulse-Key / gRPC metadata）
 //  2. 转换 OTLP protobuf → domain.Span
-//  3. 异步批量写入
-//  4. 返回 PartialSuccess 结果
+//  3. 同步入队（失败返回 PartialSuccess / gRPC 错误）
+//  4. 返回 ExportTraceServiceResponse
 func (h *GRPCHandler) Export(ctx context.Context, req *collectorpb.ExportTraceServiceRequest) (resp *collectorpb.ExportTraceServiceResponse, err error) {
 	// panic 恢复：必须改写命名返回值，否则 recover 后会以 (nil, nil) 伪造成功
 	defer func() {
@@ -92,19 +91,18 @@ func (h *GRPCHandler) Export(ctx context.Context, req *collectorpb.ExportTraceSe
 		return &collectorpb.ExportTraceServiceResponse{}, nil
 	}
 
-	// 异步写入，不阻塞 gRPC 响应
-	go func() {
-		ingestCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		defer func() {
-			if rec := recover(); rec != nil {
-				h.logger.Errorf("otlp grpc async panic: %v\n%s", rec, debug.Stack())
-			}
-		}()
-		if err := h.services.IngestSpans(ingestCtx, spans); err != nil {
-			h.logger.Errorf("ingest %d spans (gRPC): %v", len(spans), err)
-		}
-	}()
+	// 同步入队；失败时用 PartialSuccess 告知 rejected_spans（OTLP 约定 HTTP 200 也可用）
+	ingestCtx, cancel := context.WithTimeout(ctx, ingestTimeout)
+	defer cancel()
+	if ingestErr := h.services.IngestSpans(ingestCtx, spans); ingestErr != nil {
+		h.logger.Errorf("ingest %d spans (gRPC): %v", len(spans), ingestErr)
+		return &collectorpb.ExportTraceServiceResponse{
+			PartialSuccess: &collectorpb.ExportTracePartialSuccess{
+				RejectedSpans: int64(len(spans)),
+				ErrorMessage:  "ingest failed: " + ingestErr.Error(),
+			},
+		}, nil
+	}
 
 	return &collectorpb.ExportTraceServiceResponse{}, nil
 }

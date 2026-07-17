@@ -1,8 +1,8 @@
 // Package collector 接收 OTLP 数据并转换为内部 Span 写入存储。
 //
 // 当前实现：
-//   - HTTPHandler: 接收 OTLP/HTTP protobuf，转 Span 后异步批量写入
-//   - GRPCHandler: 接收 OTLP/gRPC，转 Span 后异步批量写入
+//   - HTTPHandler: 接收 OTLP/HTTP protobuf，转 Span 后同步入队
+//   - GRPCHandler: 接收 OTLP/gRPC，转 Span 后同步入队
 //
 // 转换逻辑提取到 otlp_converter.go，两处 handler 共用。
 //
@@ -10,7 +10,7 @@
 //   - API Key 鉴权(基于 cfg.Auth.APIKeys 白名单)
 //   - Body size 上限(默认 10MB,防止 OOM)
 //   - panic recover(防止单个请求 panic 杀死进程)
-//   - 失败写入通过 OTLP PartialSuccess 反馈客户端
+//   - 入队失败通过 OTLP PartialSuccess 反馈客户端（HTTP 仍 200 + PartialSuccess）
 package collector
 
 import (
@@ -28,6 +28,9 @@ import (
 	"github.com/agentpulse/backend/internal/service"
 	"github.com/agentpulse/backend/pkg/logger"
 )
+
+// ingestTimeout 单次 Export 同步入队超时。
+const ingestTimeout = 30 * time.Second
 
 // HTTPHandler 接收 OTLP/HTTP 请求。
 //
@@ -120,21 +123,15 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 异步写入(不阻塞 OTLP 响应),失败通过 PartialSuccess 反馈。
-	// 使用独立的 background ctx: r.Context() 在 handler 返回后立即取消,
-	// 会导致异步写入在 ctx canceled 中失败。
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		defer func() {
-			if rec := recover(); rec != nil {
-				h.logger.Errorf("otlp async panic: %v\n%s", rec, debug.Stack())
-			}
-		}()
-		if err := h.services.IngestSpans(ctx, spans); err != nil {
-			h.logger.Errorf("ingest %d spans: %v", len(spans), err)
-		}
-	}()
+	// 同步入队：失败时通过 PartialSuccess 反馈，客户端可重试。
+	// 批量落库仍由 SpanService worker 异步完成；此处保证「被接受」可观测。
+	ctx, cancel := context.WithTimeout(r.Context(), ingestTimeout)
+	defer cancel()
+	if err := h.services.IngestSpans(ctx, spans); err != nil {
+		h.logger.Errorf("ingest %d spans: %v", len(spans), err)
+		h.writeSuccess(w, len(spans), "ingest failed: "+err.Error())
+		return
+	}
 
 	h.writeSuccess(w, len(spans), "")
 }
