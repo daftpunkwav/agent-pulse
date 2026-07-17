@@ -34,6 +34,11 @@ func newMockSpanRepo() *mockSpanRepo {
 
 func (m *mockSpanRepo) setError(err error) { m.mu.Lock(); m.err = err; m.mu.Unlock() }
 func (m *mockSpanRepo) insertCount() int { m.mu.RLock(); defer m.mu.RUnlock(); return m.insertCalls }
+func (m *mockSpanRepo) storedCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.spans)
+}
 
 func (m *mockSpanRepo) Insert(_ context.Context, span *domain.Span) error {
 	m.mu.Lock(); defer m.mu.Unlock()
@@ -188,11 +193,15 @@ func TestIngestSpansQueuesSpans(t *testing.T) {
 		t.Fatalf("IngestSpans failed: %v", err)
 	}
 
-	// 等待 worker 处理（flush tick 5s）
+	// 等待 worker 处理（flush tick 5s）；多 worker 可能拆成多次 BatchInsert
 	time.Sleep(6 * time.Second)
 
-	if spanRepo.insertCount() != 1 {
-		t.Errorf("expected 1 batch insert call, got %d", spanRepo.insertCount())
+	if spanRepo.insertCount() < 1 {
+		t.Errorf("expected at least 1 batch insert call, got %d", spanRepo.insertCount())
+	}
+	// 断言实际入库 span 数，而非 batch 次数（2 worker 下可能 1 或 2 次 flush）
+	if got := spanRepo.storedCount(); got != 2 {
+		t.Errorf("expected 2 spans stored, got %d", got)
 	}
 }
 
