@@ -30,13 +30,17 @@ function withTimeout(signal?: AbortSignal): { controller: AbortController; timeo
   return { controller, timeoutId };
 }
 
-/** 构建完整 URL */
+/** 构建完整 URL（禁止绝对 URL，防止绕过 BFF 白名单） */
 function resolveUrl(path: string): string {
   if (path.startsWith("http://") || path.startsWith("https://")) {
-    return path;
+    throw new ApiError(400, "absolute URL is not allowed; use relative API path");
   }
   if (!path.startsWith("/")) {
     path = "/" + path;
+  }
+  // 已是同源 BFF 前缀时原样使用（如 healthz 探活）
+  if (path.startsWith(API_BASE + "/") || path === API_BASE) {
+    return path;
   }
   return API_BASE + path;
 }

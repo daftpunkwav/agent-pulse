@@ -32,6 +32,7 @@ cp .env.example .env.local
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `BACKEND_API_BASE` | `http://localhost:8080` | AgentPulse 后端地址（服务端变量，不暴露给浏览器） |
+| `BACKEND_API_KEY` | （空） | 后端 `X-AgentPulse-Key`；**仅服务端**，BFF 注入；勿使用 `NEXT_PUBLIC_` |
 
 ## 目录结构
 
@@ -62,21 +63,22 @@ src/
 - **Zod** (运行时校验)
 - **next-themes** (主题切换)
 
-## API 代理
+## API 代理（BFF）
 
-开发环境通过 Next.js rewrites 代理 `/api/backend/*` 到 AgentPulse 后端 `/api/v1/*`：
+浏览器只请求同源 `/api/backend/*`。由 Route Handler
+`src/app/api/backend/[...path]/route.ts` 转发到后端，并注入
+`X-AgentPulse-Key`（来自 `BACKEND_API_KEY` / `AGENTPULSE_API_KEY`）。
 
-```js
-// next.config.js
-rewrites: [
-  {
-    source: "/api/backend/:path*",
-    destination: "http://localhost:8080/api/v1/:path*",
-  },
-]
+- 白名单前缀：`traces` / `cost` / `eval` / `clusters` / `harness` / `abtests`
+- 探活：`/api/backend/healthz`、`/api/backend/readyz`（不注入密钥）
+- 客户端无法伪造上游鉴权头；密钥不会进入 `NEXT_PUBLIC_*`
+
+```bash
+# 本地示例
+export BACKEND_API_BASE=http://localhost:8080
+export BACKEND_API_KEY=ap-your-local-key-01
+npm run dev
 ```
-
-这样前端只需调用 `/api/backend/cost/total`，避免 CORS 问题。
 
 ## 当前 MVP 范围
 
