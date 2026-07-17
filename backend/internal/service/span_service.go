@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/agentpulse/backend/internal/domain"
@@ -30,6 +31,8 @@ type SpanService struct {
 
 	closeOnce sync.Once
 	closed    chan struct{}
+	// stopped 优先于 select 竞态：closed 与 queue 同时就绪时 send 可能仍成功
+	stopped atomic.Bool
 }
 
 // SpanServiceConfig Span 服务配置。
@@ -79,12 +82,18 @@ func (s *SpanService) IngestSpans(ctx context.Context, spans []*domain.Span) err
 	if len(spans) == 0 {
 		return nil
 	}
+	if s.stopped.Load() {
+		return fmt.Errorf("service closed")
+	}
 
 	// 1. 计算缺失成本
 	s.fillMissingCost(ctx, spans)
 
 	// 2. 异步写入
 	for _, span := range spans {
+		if s.stopped.Load() {
+			return fmt.Errorf("service closed")
+		}
 		select {
 		case s.batchQueue <- span:
 		case <-s.closed:
@@ -174,11 +183,22 @@ func (s *SpanService) batchWorker(id int) {
 				batch = batch[:0]
 			}
 		case <-s.closed:
-			// 最终刷新
-			if len(batch) > 0 {
-				s.flush(id, batch)
+			// 关闭后 drain 队列并最终 flush，避免 Shutdown 丢数
+			for {
+				select {
+				case span := <-s.batchQueue:
+					batch = append(batch, span)
+					if len(batch) >= s.batchSize {
+						s.flush(id, batch)
+						batch = batch[:0]
+					}
+				default:
+					if len(batch) > 0 {
+						s.flush(id, batch)
+					}
+					return
+				}
 			}
-			return
 		}
 	}
 }
@@ -197,7 +217,18 @@ func (s *SpanService) flush(workerID int, batch []*domain.Span) {
 // Shutdown 优雅关闭，等待所有 worker 完成。
 func (s *SpanService) Shutdown(ctx context.Context) {
 	s.closeOnce.Do(func() {
+		// 先标记 stopped，再 close(closed)，避免 IngestSpans select 竞态仍入队
+		s.stopped.Store(true)
 		close(s.closed)
-		s.workerWG.Wait()
+		done := make(chan struct{})
+		go func() {
+			s.workerWG.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			// 超时仍返回；worker 可能在后台收尾
+		}
 	})
 }
