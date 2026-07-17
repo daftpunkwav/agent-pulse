@@ -1,6 +1,8 @@
 """AutoGen 集成。
 
 包装 Agent 的 send/receive 及 a_send/a_receive 异步路径。
+
+安全默认：``capture_content=False``，不序列化消息正文。
 """
 
 from __future__ import annotations
@@ -24,10 +26,14 @@ class AgentPulseAutoGenHook:
 
         hook = AgentPulseAutoGenHook(agent_name="my-autogen-agent")
         wrapped = hook.wrap_agent(my_agent)
+
+        # 显式开启内容采集（可能含 PII）
+        hook = AgentPulseAutoGenHook(agent_name="x", capture_content=True)
     """
 
-    def __init__(self, agent_name: str = ""):
+    def __init__(self, agent_name: str = "", *, capture_content: bool = False):
         self.agent_name = agent_name
+        self.capture_content = capture_content
 
     def wrap_agent(self, agent: Any) -> Any:
         """包装 AutoGen Agent，自动追踪其 send/recv 事件（含异步路径）。"""
@@ -43,30 +49,43 @@ class AgentPulseAutoGenHook:
         return agent
 
     def _wrap_sync(self, original: Callable[..., Any], span_name: str) -> Callable[..., Any]:
+        capture = self.capture_content
+        agent_name = self.agent_name
+
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            with trace(span_name, span_type="agent", agent_name=self.agent_name) as t:
-                t.set_input(_safe_serialize({"args": args, "kwargs": kwargs}, max_length=500))
+            with trace(span_name, span_type="agent", agent_name=agent_name) as t:
+                if capture:
+                    t.set_input(
+                        _safe_serialize({"args": args, "kwargs": kwargs}, max_length=500)
+                    )
                 try:
                     result = original(*args, **kwargs)
-                except Exception as exc:
-                    t.record_exception(exc)
+                except Exception:
+                    # 由 trace() 统一 record_exception
                     raise
-                t.set_output(_safe_serialize(result, max_length=500))
+                if capture:
+                    t.set_output(_safe_serialize(result, max_length=500))
                 t.set_status_ok()
                 return result
 
         return wrapper
 
     def _wrap_async(self, original: Callable[..., Any], span_name: str) -> Callable[..., Any]:
+        capture = self.capture_content
+        agent_name = self.agent_name
+
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            with trace(span_name, span_type="agent", agent_name=self.agent_name) as t:
-                t.set_input(_safe_serialize({"args": args, "kwargs": kwargs}, max_length=500))
+            with trace(span_name, span_type="agent", agent_name=agent_name) as t:
+                if capture:
+                    t.set_input(
+                        _safe_serialize({"args": args, "kwargs": kwargs}, max_length=500)
+                    )
                 try:
                     result = await original(*args, **kwargs)
-                except Exception as exc:
-                    t.record_exception(exc)
+                except Exception:
                     raise
-                t.set_output(_safe_serialize(result, max_length=500))
+                if capture:
+                    t.set_output(_safe_serialize(result, max_length=500))
                 t.set_status_ok()
                 return result
 

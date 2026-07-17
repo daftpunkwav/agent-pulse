@@ -16,10 +16,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def create_agentpulse_callback(agent_name: str = "") -> "AgentPulseCallback":
+def create_agentpulse_callback(
+    agent_name: str = "",
+    *,
+    capture_content: bool = False,
+) -> "AgentPulseCallback":
     """创建 LangGraph 兼容的 Callback Handler。
 
     LangGraph 通过 `config={"callbacks": [handler]}` 传入回调列表。
+
+    Args:
+        agent_name: 默认 agent 名。
+        capture_content: 是否上报 prompt/输出（默认 False，防 PII）。
 
     Raises:
         ImportError: langchain-core 未安装时抛出。
@@ -31,7 +39,7 @@ def create_agentpulse_callback(agent_name: str = "") -> "AgentPulseCallback":
         )
     from agentpulse.integrations.langchain_callback import AgentPulseCallback
 
-    return AgentPulseCallback(agent_name=agent_name)
+    return AgentPulseCallback(agent_name=agent_name, capture_content=capture_content)
 
 
 __all__ = ["create_agentpulse_callback"]
