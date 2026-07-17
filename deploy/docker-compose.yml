@@ -81,7 +81,12 @@ services:
     volumes:
       - ./data/chroma:/chroma/chroma
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      # Token 鉴权开启时 heartbeat 需要 Authorization
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS -H \"Authorization: Bearer $$CHROMA_SERVER_AUTHN_CREDENTIALS\" http://localhost:8000/api/v1/heartbeat || exit 1",
+        ]
       interval: 15s
       timeout: 5s
       retries: 5

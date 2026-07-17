@@ -5,6 +5,7 @@ metadata:
   namespace: agentpulse
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # 生产 TLS 由 overlays/production 注入 cert-manager 与 tls 段
 spec:
   ingressClassName: nginx
   rules:
@@ -25,3 +26,11 @@ spec:
                 name: agentpulse-backend
                 port:
                   number: 8080
+          # OTLP HTTP 经 Ingress 暴露（gRPC 4317 建议集群内 Service 或单独 Ingress）
+          - path: /v1/traces
+            pathType: Prefix
+            backend:
+              service:
+                name: agentpulse-backend
+                port:
+                  number: 4318

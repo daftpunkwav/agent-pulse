@@ -4,6 +4,15 @@ kind: Kustomization
 resources:
   - ../../base
 
+# 从本地 secrets.env 生成 Secret（文件勿提交仓库）
+# 模板见 secrets.env.example
+secretGenerator:
+  - name: agentpulse-secrets
+    envs:
+      - secrets.env
+    options:
+      disableNameSuffixHash: true
+
 patches:
   - target:
       kind: Deployment
@@ -19,3 +28,20 @@ patches:
       - op: replace
         path: /spec/replicas
         value: 2
+  # 生产 Ingress：要求 TLS secret（由 cert-manager 或手动创建）
+  - target:
+      kind: Ingress
+      name: agentpulse-ingress
+    patch: |
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-prod
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - agentpulse.example.com
+            secretName: agentpulse-tls
+      - op: replace
+        path: /spec/rules/0/host
+        value: agentpulse.example.com

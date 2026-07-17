@@ -12,13 +12,43 @@ deploy/
 ├── init/
 │   ├── clickhouse/01-init.sql      # ClickHouse 表结构与初始化
 │   └── postgres/01-init.sql        # PostgreSQL 表结构与初始化数据
-├── k8s/                            # Kubernetes  manifests
+├── k8s/                            # Kubernetes manifests
 │   ├── base/                       # 基础资源（Deployment/Service/StatefulSet/Ingress/NetworkPolicy）
-│   └── overlays/production/        # 生产环境 overlay（扩缩容）
+│   │   └── secrets.example.yaml    # Secret 模板（勿直接 apply 生产）
+│   └── overlays/production/        # 生产 overlay（扩缩容 + secretGenerator + TLS）
+│       └── secrets.env.example     # 复制为 secrets.env 后 kustomize build
+├── docker-compose.yml              # 本地基础设施（端口仅绑 127.0.0.1）
 └── README.md                       # 本文件
 ```
 
-> **注意**: 本目录不含 `docker-compose.yml`。本地开发使用根目录的 Docker Compose 配置（如有），或手动启动各服务。
+## Kubernetes 密钥与连接
+
+**仓库内不提交真实 Secret。** base 中的 Backend 通过 `secretKeyRef` 引用 `agentpulse-secrets`，需先创建：
+
+```bash
+# 方式 A：示例文件改名后 apply（仅开发）
+cp k8s/base/secrets.example.yaml /tmp/agentpulse-secrets.yaml
+# 编辑 /tmp/agentpulse-secrets.yaml 填入强密钥
+kubectl apply -f /tmp/agentpulse-secrets.yaml
+
+# 方式 B：生产 overlay（推荐）
+cd k8s/overlays/production
+cp secrets.env.example secrets.env
+# 编辑 secrets.env
+kubectl apply -k .
+```
+
+Backend 注入的环境变量包括：
+
+| 变量 | 用途 |
+|------|------|
+| `AGENTPULSE_AUTH_API_KEYS` | API 鉴权 |
+| `AGENTPULSE_POSTGRES_*` | Postgres 连接 |
+| `AGENTPULSE_CLICKHOUSE_*` | ClickHouse 连接 |
+| `AGENTPULSE_CHROMA_*` | Chroma 连接与 token |
+| `AGENTPULSE_JUDGE_API_KEY` | LLM Judge（release 必填） |
+
+Chroma 使用 PVC 持久化 + Token 鉴权；探活请求携带 `Authorization: Bearer`。
 
 ## 启动本地基础设施
 
