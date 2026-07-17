@@ -1,5 +1,8 @@
 # ===== Python SDK =====
 sdk-python/.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
 sdk-python/__pycache__/
 sdk-python/**/__pycache__/
 sdk-python/*.egg-info/
